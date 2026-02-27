@@ -1,0 +1,30 @@
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ── Build / package output ────────────────────────────────────────────────────
+ui/build/
+dist/
+package/
+
+# ── Runtime logs ──────────────────────────────────────────────────────────────
+logs/
+shaders/*/logs/
+*.log
+
+# ── Wallet binary (platform-specific, never commit) ──────────────────────────
+cli wallet/
+
+# ── Windows artifacts ─────────────────────────────────────────────────────────
+NUL
+Thumbs.db
+Desktop.ini
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store

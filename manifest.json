@@ -1,0 +1,11 @@
+{
+  "name": "BeamBet",
+  "description": "Confidential on-chain betting DApp. Place bets on random number outcomes with guaranteed fairness. UP/DOWN pays 1.9x, EXACT pays 2.8x.",
+  "url": "localapp/app/index.html",
+  "icon": "localapp/app/icon.svg",
+  "version": "1.0.0",
+  "api_version": "7.0",
+  "min_api_version": "7.0",
+  "guid": "d353352eb6a94618ac0a8ec7bb001a2b",
+  "category": 2
+}
