@@ -242,7 +242,7 @@ void On_place_bet(const ContractID& cid)
     fc.m_Amount = args.m_Amount;
     fc.m_Consume = 1;
 
-    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "BeamBet: place bet", 200000);
+    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "BeamBet: place bet", 130000);
 }
 
 void On_check_results(const ContractID& cid)
@@ -323,10 +323,10 @@ void On_check_results(const ContractID& cid)
     Env::KeyID kid(&uk, sizeof(uk));
 
     // Dynamic charge: base overhead + per-bet cost (LoadVar + SHA256 + SaveVar)
-    // Base: state load/save + AddSig + FundsUnlock + AdvanceFirstUnresolved ≈ 750K
-    // Per bet: LoadVar(Bet) + SHA256 + SaveVar(Bet) ≈ 55K
-    uint32_t nCharge = 750000 + processedCount * 55000;
-    if (nCharge < 500000) nCharge = 500000;   // Floor for minimal overhead
+    // Base: state load/save + AddSig + FundsUnlock + AdvanceFirstUnresolved(50) ≈ 700K
+    // Per bet: LoadVar(Bet) + SHA256 + SaveVar(Bet) ≈ 50K
+    uint32_t nCharge = 700000 + processedCount * 50000;
+    if (nCharge < 300000) nCharge = 300000;   // Floor for minimal overhead
 
     if (totalPayout > 0)
     {
@@ -550,11 +550,11 @@ void On_check_result(const ContractID& cid)
         fc.m_Aid = b.m_AssetId;  // Use bet's actual asset (matches contract Method_9)
         fc.m_Amount = payout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: check single result", 300000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: check single result", 250000);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: check single result", 300000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: check single result", 250000);
     }
 }
 
@@ -628,7 +628,7 @@ void On_reveal_bet(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: reveal bet", 200000);
+    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: reveal bet", 130000);
 }
 
 void On_resolve_bets(const ContractID& cid)
@@ -639,8 +639,11 @@ void On_resolve_bets(const ContractID& cid)
     if (tempCount == 0 || tempCount > 200) tempCount = 50;
     args.m_MaxCount = tempCount;
 
+    // Dynamic charge: base covers state + AdvanceFirstUnresolved(50), per-bet covers LoadVar + SHA256 + SaveVar
+    uint32_t nCharge = 750000 + tempCount * 50000;
+
     // No FundsChange needed - resolve_bets only reveals results, no payouts
-    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "BeamBet: resolve expired bets", 3000000);
+    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "BeamBet: resolve expired bets", nCharge);
 }
 
 void On_deposit(const ContractID& cid)
@@ -666,7 +669,7 @@ void On_deposit(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: deposit", 100000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: deposit", 75000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -692,7 +695,7 @@ void On_withdraw(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: withdraw", 100000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: withdraw", 75000);
 }
 
 void On_set_owner(const ContractID& cid)
@@ -703,7 +706,7 @@ void On_set_owner(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set owner", 100000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set owner", 70000);
 }
 
 void On_set_config(const ContractID& cid)
@@ -723,7 +726,7 @@ void On_set_config(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set config", 100000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set config", 70000);
 }
 
 // ============================================================================
