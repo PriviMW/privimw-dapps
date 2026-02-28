@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#25c2a0"/>
+      <stop offset="100%" stop-color="#448aff"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="url(#bg)" stroke="url(#shield)" stroke-width="1.5" opacity="1"/>
+  <!-- Shield shape -->
+  <path d="M50 14L76 26V44C76 58 65 70 50 74C35 70 24 58 24 44V26Z" fill="url(#shield)" fill-opacity="0.15" stroke="url(#shield)" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- MW wave lines (MimbleWimble beams) -->
+  <path d="M32 38Q41 30 50 38T68 38" fill="none" stroke="url(#shield)" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 48Q41 40 50 48T68 48" fill="none" stroke="url(#shield)" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M34 57Q42 50 50 57T66 57" fill="none" stroke="url(#shield)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+</svg>

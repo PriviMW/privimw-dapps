@@ -1,17 +1,18 @@
-// BeamBet Contract Header
+// PriviBets Contract Header
 #pragma once
 
 namespace BeamBet {
 
 // Shader ID (hash of compiled contract.wasm) - update after each recompile
-static const ShaderID s_SID = {0x4a,0x06,0xcf,0x27,0x2f,0x09,0xaa,0xab,0x68,0xb5,0x13,0x2d,0xd4,0xd0,0x62,0x0b,0x08,0x4a,0x47,0x9a,0x1f,0x93,0xbd,0x2b,0x62,0x45,0xbc,0xc5,0x20,0xd0,0x6b,0x9b};
+static const ShaderID s_SID = {0x7f,0x88,0xaf,0x62,0x26,0x9e,0xf4,0x5b,0xb9,0xfe,0xa4,0xa4,0x18,0x24,0xf0,0xab,0xc9,0x30,0x76,0x03,0x5c,0x21,0x89,0x4a,0xdc,0x3d,0x06,0xfb,0x87,0x11,0x97,0x24};
 
 // Constants
 static const uint64_t s_DefaultMinBet = 1000000ULL;      // 0.01 BEAM
 static const uint64_t s_DefaultMaxBet = 10000000000ULL;  // 100 BEAM
 static const uint64_t s_DefaultUpDownMult = 190ULL;      // 1.9x (5% house edge)
 static const uint64_t s_DefaultExactMult = 9500ULL;      // 95x (5% house edge on 1/100 chance)
-static const uint64_t s_RevealEpoch = 10ULL;             // 10 blocks minimum wait
+static const uint64_t s_RevealEpoch = 3ULL;              // 3 blocks minimum wait (default)
+static const uint64_t s_MinRevealEpoch = 2ULL;           // Security floor: never less than 2
 
 // Bet status
 struct BetStatus {
@@ -59,7 +60,6 @@ struct Bet {
     uint64_t m_MaxPayout;       // Worst-case payout reserved at placement
     uint64_t m_CreatedHeight;   // Block height when bet was placed
     uint64_t m_RevealedHeight;  // Block height when result was revealed
-    HashValue m_Commitment;     // User-provided commitment (personalization, cannot be changed after placing)
     HashValue m_PlacementHash;  // Block hash at bet placement (entropy the user cannot predict)
 };
 
@@ -78,7 +78,6 @@ struct PlaceBet {
     AssetID m_AssetId;
     uint8_t m_Type;
     uint8_t m_ExactNumber;
-    HashValue m_Commitment;
 };
 
 struct CheckResults {
@@ -108,6 +107,7 @@ struct SetConfig {
     uint64_t m_MaxBet;
     uint64_t m_UpDownMult;
     uint64_t m_ExactMult;
+    uint64_t m_RevealEpoch;
     uint8_t m_Paused;
     AssetID m_AssetId;
 };

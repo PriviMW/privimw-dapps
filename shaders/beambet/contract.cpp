@@ -1,4 +1,4 @@
-// BeamBet Contract Shader
+// PriviBets Contract Shader
 #include "common.h"
 #include "contract.h"
 
@@ -40,13 +40,12 @@ uint64_t GetAvailableBalance() {
     return total - reserved;
 }
 
-// Calculate deterministic random from commitment + placement block hash + reveal height + bet ID
+// Calculate deterministic random from placement block hash + reveal height + bet ID
 // Returns a value 1-100
 // Security: placementHash is the block hash at bet placement time, which is unknowable
 // to the user when constructing the PlaceBet transaction (circular dependency on block hash).
-uint8_t CalculateRandomResult(const HashValue& commitment, const HashValue& placementHash, Height revealHeight, uint64_t betId) {
+uint8_t CalculateRandomResult(const HashValue& placementHash, Height revealHeight, uint64_t betId) {
     HashProcessor::Sha256 hp;
-    hp.Write(commitment);
     hp.Write(placementHash);
     hp.Write(&revealHeight, sizeof(revealHeight));
     hp.Write(&betId, sizeof(betId));
@@ -127,7 +126,7 @@ void AutoResolveExpired(State& s, uint32_t maxCount) {
         if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) break; // remaining bets are newer, stop
 
         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-        uint8_t result = CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+        uint8_t result = CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         ProcessBetResult(b, result, s);
 
         Env::SaveVar_T(bk, b);
@@ -232,7 +231,6 @@ BEAM_EXPORT void Method_2(const BeamBet::Method::PlaceBet& r)
     b.m_AssetId = r.m_AssetId;
     b.m_Type = r.m_Type;
     b.m_ExactNumber = r.m_ExactNumber;
-    _POD_(b.m_Commitment) = r.m_Commitment;
     _POD_(b.m_PlacementHash) = hdr.m_Hash;
     b.m_Status = BeamBet::BetStatus::Pending;
     b.m_CreatedHeight = Env::get_Height();
@@ -289,7 +287,7 @@ BEAM_EXPORT void Method_3(const BeamBet::Method::CheckResults& r)
             if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
 
             Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-            uint8_t result = BeamBet::CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+            uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
             BeamBet::ProcessBetResult(b, result, s);
         }
         else if (b.m_Status == BeamBet::BetStatus::Won) {
@@ -380,6 +378,10 @@ BEAM_EXPORT void Method_7(const BeamBet::Method::SetConfig& r)
     if (r.m_MaxBet > 0) s.m_MaxBet = r.m_MaxBet;
     if (r.m_UpDownMult > 0) s.m_UpDownMult = r.m_UpDownMult;
     if (r.m_ExactMult > 0) s.m_ExactMult = r.m_ExactMult;
+    if (r.m_RevealEpoch > 0) {
+        if (r.m_RevealEpoch < BeamBet::s_MinRevealEpoch) Env::Halt();
+        s.m_RevealEpoch = r.m_RevealEpoch;
+    }
     s.m_Paused = r.m_Paused;
 
     // Overflow protection: maxBet * multiplier must not overflow uint64_t
@@ -424,7 +426,7 @@ BEAM_EXPORT void Method_8(const BeamBet::Method::RevealBet& r)
 
     // Deterministic result - same formula as user reveal (owner cannot manipulate)
     Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-    uint8_t result = BeamBet::CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+    uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
 
     BeamBet::ProcessBetResult(b, result, s);
     // Note: does NOT claim - user must call check_result to receive winnings
@@ -460,7 +462,7 @@ BEAM_EXPORT void Method_9(const BeamBet::Method::CheckSingleResult& r)
         if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) Env::Halt();
 
         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-        uint8_t result = BeamBet::CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+        uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         BeamBet::ProcessBetResult(b, result, s);
     }
     else if (b.m_Status == BeamBet::BetStatus::Won)
@@ -516,7 +518,7 @@ BEAM_EXPORT void Method_10(const BeamBet::Method::ResolveExpiredBets& r)
         if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
 
         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-        uint8_t result = BeamBet::CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+        uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         BeamBet::ProcessBetResult(b, result, s);
 
         Env::SaveVar_T(bk, b);

@@ -1,17 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0a0e17"/>
-      <stop offset="100%" style="stop-color:#111827"/>
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#111827"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#25c2a0"/>
-      <stop offset="100%" style="stop-color:#448aff"/>
+    <linearGradient id="top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4a8"/>
+      <stop offset="100%" stop-color="#25c2a0"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e9e85"/>
+      <stop offset="100%" stop-color="#3a7ae8"/>
+    </linearGradient>
+    <linearGradient id="right" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a8a70"/>
+      <stop offset="100%" stop-color="#3068c8"/>
     </linearGradient>
   </defs>
-  <circle cx="50" cy="50" r="48" fill="url(#bg)" stroke="url(#accent)" stroke-width="2"/>
-  <circle cx="50" cy="50" r="36" fill="none" stroke="url(#accent)" stroke-width="1" opacity="0.2"/>
-  <text x="50" y="58" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="36" fill="url(#accent)">B</text>
-  <circle cx="72" cy="28" r="8" fill="#10b981" opacity="0.8"/>
-  <text x="72" y="32" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="11" fill="#fff">%</text>
+  <!-- Background -->
+  <circle cx="50" cy="50" r="48" fill="url(#bg)" stroke="#25c2a0" stroke-width="1.5" stroke-opacity="0.3"/>
+  <!-- Subtle glow under die -->
+  <ellipse cx="50" cy="84" rx="22" ry="5" fill="#25c2a0" opacity="0.08"/>
+  <!-- Top face (6 dots) -->
+  <polygon points="50,14 82,32 50,50 18,32" fill="url(#top)"/>
+  <!-- Left face (3 dots) -->
+  <polygon points="18,32 50,50 50,86 18,68" fill="url(#left)"/>
+  <!-- Right face (1 dot) -->
+  <polygon points="82,32 50,50 50,86 82,68" fill="url(#right)"/>
+  <!-- Edge highlights -->
+  <line x1="50" y1="14" x2="82" y2="32" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+  <line x1="50" y1="14" x2="18" y2="32" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+  <line x1="18" y1="32" x2="18" y2="68" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>
+  <line x1="82" y1="32" x2="82" y2="68" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+  <!-- Inner edges -->
+  <line x1="50" y1="50" x2="50" y2="86" stroke="rgba(0,0,0,0.15)" stroke-width="0.5"/>
+  <line x1="50" y1="50" x2="18" y2="32" stroke="rgba(0,0,0,0.08)" stroke-width="0.5"/>
+  <line x1="50" y1="50" x2="82" y2="32" stroke="rgba(0,0,0,0.08)" stroke-width="0.5"/>
+  <!-- Top face dots (6) -->
+  <circle cx="50" cy="23" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <circle cx="58" cy="27.5" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <circle cx="66" cy="32" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <circle cx="34" cy="32" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <circle cx="42" cy="36.5" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <circle cx="50" cy="41" r="3.2" fill="rgba(255,255,255,0.92)"/>
+  <!-- Left face dots (3 diagonal) -->
+  <circle cx="27" cy="46" r="2.5" fill="rgba(255,255,255,0.8)"/>
+  <circle cx="34" cy="59" r="2.5" fill="rgba(255,255,255,0.8)"/>
+  <circle cx="41" cy="72" r="2.5" fill="rgba(255,255,255,0.8)"/>
+  <!-- Right face dot (1 center) -->
+  <circle cx="66" cy="59" r="3" fill="rgba(255,255,255,0.85)"/>
 </svg>

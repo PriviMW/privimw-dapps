@@ -1,4 +1,4 @@
-// BeamBet App Shader
+// PriviBets App Shader
 #include "common.h"
 #include "app_common_impl.h"
 #include "contract.h"
@@ -12,11 +12,11 @@ void OnError(const char* sz)
 // Owner key derivation
 struct OwnerKey {
     ShaderID m_SID;
-    uint8_t m_pSeed[16];  // Actual seed: "beambet-owner-ke" (first 16 bytes of "beambet-owner-key")
+    uint8_t m_pSeed[16];  // Actual seed: "beambet-owner-ke" (first 16 bytes — DO NOT change, tied to deployed contracts)
 
     OwnerKey() {
         _POD_(m_SID) = BeamBet::s_SID;
-        const char szSeed[] = "beambet-owner-key";
+        const char szSeed[] = "beambet-owner-key";  // Historical seed, must not change
         Env::Memcpy(m_pSeed, szSeed, sizeof(m_pSeed));
     }
 
@@ -100,6 +100,7 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("max_bet", "uint64");
                 Env::DocAddText("up_down_mult", "uint64");
                 Env::DocAddText("exact_mult", "uint64");
+                Env::DocAddText("reveal_epoch", "uint64");
                 Env::DocAddText("paused", "uint32");
                 Env::DocAddText("asset_id", "AssetID");
             }
@@ -117,7 +118,6 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("asset_id", "AssetID");
                 Env::DocAddText("bet_type", "uint32");
                 Env::DocAddText("exact_number", "uint32");
-                Env::DocAddText("commitment", "HashValue");
             }
             {
                 Env::DocGroup grMethod("check_results");
@@ -144,6 +144,11 @@ BEAM_EXPORT void Method_0()
                 Env::DocGroup grMethod("view_all");
                 Env::DocAddText("cid", "ContractID");
             }
+            {
+                Env::DocGroup grMethod("view_recent_results");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("count", "uint32");
+            }
         }
     }
 }
@@ -159,7 +164,7 @@ void On_create_contract(const ContractID& cid)
     OwnerKey ok;
     ok.DerivePk(params.m_OwnerPk);
 
-    Env::GenerateKernel(nullptr, 0, &params, sizeof(params), nullptr, 0, nullptr, 0, "create BeamBet contract", 0);
+    Env::GenerateKernel(nullptr, 0, &params, sizeof(params), nullptr, 0, nullptr, 0, "create PriviBets contract", 0);
 }
 
 void On_view_contracts(const ContractID& cid)
@@ -243,7 +248,6 @@ void On_place_bet(const ContractID& cid)
     Env::DocGet("asset_id", args.m_AssetId);
     Env::DocGet("bet_type", tempType);
     Env::DocGet("exact_number", tempExact);
-    Env::DocGet("commitment", args.m_Commitment);
 
     args.m_Type = (uint8_t)tempType;
     args.m_ExactNumber = (uint8_t)tempExact;
@@ -254,7 +258,7 @@ void On_place_bet(const ContractID& cid)
     fc.m_Consume = 1;
 
     // nCharge covers: PlaceBet base (~130K) + auto-resolve up to 5 expired bets (~250K) + AdvanceFirstUnresolved (~20K)
-    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "BeamBet: place bet", 400000);
+    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "PriviBets: place bet", 400000);
 }
 
 void On_check_results(const ContractID& cid)
@@ -302,7 +306,6 @@ void On_check_results(const ContractID& cid)
 
                 Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
                 HashProcessor::Sha256 hp;
-                hp.Write(b.m_Commitment);
                 hp.Write(b.m_PlacementHash);
                 hp.Write(&revealHeight, sizeof(revealHeight));
                 hp.Write(&b.m_BetId, sizeof(b.m_BetId));
@@ -350,11 +353,11 @@ void On_check_results(const ContractID& cid)
         fc.m_Aid = s.m_AssetId;
         fc.m_Amount = totalPayout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: check results", nCharge);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: check results", nCharge);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: check results", nCharge);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: check results", nCharge);
     }
 }
 
@@ -426,7 +429,6 @@ void On_my_bets(const ContractID& cid)
             {
                 Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
                 HashProcessor::Sha256 hp;
-                hp.Write(b.m_Commitment);
                 hp.Write(b.m_PlacementHash);
                 hp.Write(&revealHeight, sizeof(revealHeight));
                 hp.Write(&b.m_BetId, sizeof(b.m_BetId));
@@ -636,7 +638,6 @@ void On_view_all(const ContractID& cid)
                     {
                         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
                         HashProcessor::Sha256 hp;
-                        hp.Write(b.m_Commitment);
                         hp.Write(b.m_PlacementHash);
                         hp.Write(&revealHeight, sizeof(revealHeight));
                         hp.Write(&b.m_BetId, sizeof(b.m_BetId));
@@ -795,10 +796,9 @@ void On_check_result(const ContractID& cid)
             return;
         }
 
-        // Replicate CalculateRandomResult (commitment + placementHash + revealHeight + betId)
+        // Replicate CalculateRandomResult (placementHash + revealHeight + betId)
         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
         HashProcessor::Sha256 hp;
-        hp.Write(b.m_Commitment);
         hp.Write(b.m_PlacementHash);
         hp.Write(&revealHeight, sizeof(revealHeight));
         hp.Write(&b.m_BetId, sizeof(b.m_BetId));
@@ -837,11 +837,11 @@ void On_check_result(const ContractID& cid)
         fc.m_Aid = b.m_AssetId;  // Use bet's actual asset (matches contract Method_9)
         fc.m_Amount = payout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: check single result", 250000);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: check single result", 250000);
     }
 }
 
@@ -912,6 +912,53 @@ void On_view_all_bets(const ContractID& cid)
     }
 }
 
+// Optimized recent results: scan only last N bets (default 50) for global results strip
+void On_view_recent_results(const ContractID& cid)
+{
+    Env::Key_T<BeamBet::StateKey> sk;
+    sk.m_Prefix.m_Cid = cid;
+
+    BeamBet::State s;
+    if (!Env::VarReader::Read_T(sk, s))
+    {
+        OnError("Failed to read contract state");
+        return;
+    }
+
+    uint32_t count = 50;
+    Env::DocGet("count", count);
+    if (count == 0 || count > 100) count = 50;
+
+    Env::DocArray gr("results");
+
+    if (s.m_NextBetId > 0)
+    {
+        uint64_t startId = (s.m_NextBetId > count) ? (s.m_NextBetId - count) : 0;
+
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = startId;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
+        BeamBet::Bet b;
+        while (scanner.MoveNext_T(key, b))
+        {
+            // Only output resolved bets with a result
+            if (b.m_Status == BeamBet::BetStatus::Pending) continue;
+            if (b.m_Result == 0) continue;
+
+            Env::DocGroup betGr("");
+            Env::DocAddNum("result", (uint32_t)b.m_Result);
+            Env::DocAddNum("type", (uint32_t)b.m_Type);
+            Env::DocAddNum("status", (uint32_t)b.m_Status);
+            Env::DocAddNum("revealed_height", b.m_RevealedHeight);
+        }
+    }
+}
+
 void On_reveal_bet(const ContractID& cid)
 {
     // Emergency reveal: deterministic result (no random_value, no user_nonce)
@@ -921,7 +968,7 @@ void On_reveal_bet(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: reveal bet", 130000);
+    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: reveal bet", 130000);
 }
 
 void On_resolve_bets(const ContractID& cid)
@@ -936,7 +983,7 @@ void On_resolve_bets(const ContractID& cid)
     uint32_t nCharge = 750000 + tempCount * 50000;
 
     // No FundsChange needed - resolve_bets only reveals results, no payouts
-    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "BeamBet: resolve expired bets", nCharge);
+    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "PriviBets: resolve expired bets", nCharge);
 }
 
 void On_deposit(const ContractID& cid)
@@ -962,7 +1009,7 @@ void On_deposit(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: deposit", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: deposit", 75000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -988,7 +1035,7 @@ void On_withdraw(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "BeamBet: withdraw", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: withdraw", 75000);
 }
 
 void On_set_owner(const ContractID& cid)
@@ -999,7 +1046,7 @@ void On_set_owner(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set owner", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: set owner", 70000);
 }
 
 void On_set_config(const ContractID& cid)
@@ -1011,6 +1058,7 @@ void On_set_config(const ContractID& cid)
     Env::DocGet("max_bet", args.m_MaxBet);
     Env::DocGet("up_down_mult", args.m_UpDownMult);
     Env::DocGet("exact_mult", args.m_ExactMult);
+    Env::DocGet("reveal_epoch", args.m_RevealEpoch);
     Env::DocGet("paused", tempPaused);
     Env::DocGet("asset_id", args.m_AssetId);
 
@@ -1019,7 +1067,7 @@ void On_set_config(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "BeamBet: set config", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: set config", 70000);
 }
 
 // ============================================================================
@@ -1084,6 +1132,8 @@ BEAM_EXPORT void Method_1()
             return On_result_history(cid);
         if (!Env::Strcmp(szAction, "view_all"))
             return On_view_all(cid);
+        if (!Env::Strcmp(szAction, "view_recent_results"))
+            return On_view_recent_results(cid);
 
         return OnError("Invalid action");
     }

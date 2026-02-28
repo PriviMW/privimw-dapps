@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BeamBet</title>
+    <title>PriviBets</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -271,7 +271,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     border: 1px solid var(--border-color);
 }
 .recent-results-label {
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -287,8 +287,8 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     -webkit-flex-wrap: wrap;
 }
 .result-bubble {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     display: flex;
     display: -webkit-flex;
@@ -345,6 +345,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     flex: 1;
     -webkit-flex: 1;
     padding: 10px 8px 8px;
+    min-height: 48px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.85rem;
@@ -368,7 +369,15 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     color: var(--accent-gold);
     box-shadow: 0 0 12px var(--gold-glow);
 }
-.bet-type-icon { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+.bet-type-icon { font-size: 1.1rem; display: block; margin-bottom: 1px; }
+.bet-type-range {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 500;
+    opacity: 0.6;
+    letter-spacing: 0.3px;
+    margin-bottom: 1px;
+}
 .bet-type-mult {
     display: block;
     font-size: 0.65rem;
@@ -482,7 +491,8 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     border: 1px solid var(--border-color);
 }
 .exact-num {
-    padding: 6px 0;
+    padding: 8px 0;
+    min-height: 36px;
     text-align: center;
     font-size: 0.7rem;
     font-family: 'JetBrains Mono', monospace;
@@ -679,11 +689,12 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 }
 .preview-result.win .preview-outcome { background: rgba(16,185,129,0.15); }
 .preview-result.loss .preview-outcome { background: rgba(239,68,68,0.15); }
-.claim-btn {
-    background: var(--accent-green) !important;
+.win-payout {
+    color: var(--accent-green);
+    font-weight: 700;
+    font-size: 0.85rem;
     white-space: nowrap;
 }
-.claim-btn:hover { background: #059669 !important; box-shadow: 0 0 12px var(--green-glow) !important; }
 .pending-card.preview-won { border-color: var(--accent-green); }
 .pending-card.preview-lost { border-color: var(--accent-red); animation: none; }
 
@@ -722,12 +733,14 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     display: -webkit-flex;
     align-items: center;
     -webkit-align-items: center;
-    padding: 6px 12px 6px 15px;
-    font-size: 0.65rem;
+    justify-content: space-between;
+    -webkit-justify-content: space-between;
+    padding: 6px 8px;
+    font-size: 0.68rem;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     border-bottom: 1px solid var(--border-color);
     margin-bottom: 4px;
 }
@@ -736,7 +749,9 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     display: -webkit-flex;
     align-items: center;
     -webkit-align-items: center;
-    padding: 8px 12px;
+    justify-content: space-between;
+    -webkit-justify-content: space-between;
+    padding: 8px 8px;
     background: var(--bg-card);
     border-radius: var(--radius-sm);
     margin-bottom: 3px;
@@ -748,26 +763,29 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .history-item.lost { border-left-color: var(--accent-red); }
 .history-col-type {
     font-weight: 600;
-    font-size: 0.75rem;
-    width: 72px;
-    min-width: 72px;
+    font-size: 0.72rem;
+    width: 56px;
+    min-width: 56px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .history-col-type.up { color: var(--accent-green); }
 .history-col-type.down { color: var(--accent-red); }
 .history-col-type.exact { color: var(--accent-gold); }
 .history-col-result {
-    width: 36px;
-    min-width: 36px;
+    width: 28px;
+    min-width: 28px;
     text-align: center;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 600;
 }
 .history-col-outcome {
-    flex: 1;
-    -webkit-flex: 1;
+    width: 38px;
+    min-width: 38px;
     text-align: center;
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     font-weight: 600;
     text-transform: uppercase;
 }
@@ -775,18 +793,18 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .history-col-outcome.loss { color: var(--accent-red); }
 .history-col-bet {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--text-secondary);
-    width: 80px;
-    min-width: 80px;
+    width: 66px;
+    min-width: 66px;
     text-align: right;
 }
 .history-col-payout {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    width: 90px;
-    min-width: 90px;
+    width: 74px;
+    min-width: 74px;
     text-align: right;
 }
 .history-col-payout.win { color: var(--accent-green); }
@@ -795,8 +813,8 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.62rem;
     color: var(--text-muted);
-    width: 62px;
-    min-width: 62px;
+    width: 50px;
+    min-width: 50px;
     text-align: right;
 }
 .empty-state {
@@ -911,6 +929,43 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 }
 
 /* ==================== ADMIN PANEL ==================== */
+/* ==================== PROVABLY FAIR FOOTER ==================== */
+.app-footer {
+    margin-top: 24px;
+    padding: 16px 12px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+.app-footer-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+}
+.app-footer-formula {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+.app-footer-desc {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+.app-footer-brand {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-top: 12px;
+    opacity: 0.6;
+}
+
 .admin-panel { display: none; }
 .admin-panel.active { display: block; }
 .admin-card {
@@ -1048,8 +1103,8 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     <div class="container">
         <div class="header-inner">
             <div class="logo" id="logo" onclick="onLogoClick()">
-                <div class="logo-icon">B</div>
-                <div class="logo-text">Beam<span>Bet</span></div>
+                <div class="logo-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L21 6.5V11C21 16.5 17.2 21.3 12 22.5C6.8 21.3 3 16.5 3 11V6.5Z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linejoin="round"/><path d="M6.5 10Q9.2 7.5 12 10T17.5 10" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M6.5 14Q9.2 11.5 12 14T17.5 14" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+                <div class="logo-text">Privi<span>Bets</span></div>
             </div>
             <div class="header-right">
                 <div class="pool-badge" id="poolBadge">
@@ -1084,14 +1139,17 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
         <div class="bet-types">
             <button class="bet-type-btn active-up" data-type="0" onclick="selectBetType(0)">
                 <span class="bet-type-icon">&#9650;</span> UP
+                <span class="bet-type-range">51-100</span>
                 <span class="bet-type-mult" id="multUp"></span>
             </button>
             <button class="bet-type-btn" data-type="1" onclick="selectBetType(1)">
                 <span class="bet-type-icon">&#9660;</span> DOWN
+                <span class="bet-type-range">1-50</span>
                 <span class="bet-type-mult" id="multDown"></span>
             </button>
             <button class="bet-type-btn" data-type="2" onclick="selectBetType(2)">
                 <span class="bet-type-icon">&#9733;</span> EXACT
+                <span class="bet-type-range">Pick #</span>
                 <span class="bet-type-mult" id="multExact"></span>
             </button>
         </div>
@@ -1168,6 +1226,14 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
             <div class="pool-row"><span class="pool-row-label">Pending Payouts</span><span class="pool-row-value" id="poolPayouts">...</span></div>
         </div>
 
+        <!-- Provably Fair Footer -->
+        <div class="app-footer">
+            <div class="app-footer-title">Provably Fair</div>
+            <div class="app-footer-formula">Result = SHA256(block_hash + reveal_height + bet_id) mod 100 + 1</div>
+            <div class="app-footer-desc">All inputs are on-chain and publicly verifiable.<br>No house secrets. No server seeds. Pure blockchain randomness.</div>
+            <div class="app-footer-brand">PriviBets by PriviMW &mdash; Private. Provable. Fair.</div>
+        </div>
+
         <!-- Admin Panel -->
         <div class="admin-panel" id="adminPanel">
             <div class="section-title" style="color: var(--accent-purple);">Admin Panel</div>
@@ -1214,6 +1280,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
                     <input type="text" class="admin-input" id="cfgExactMult" placeholder="Exact mult (x100)">
                 </div>
                 <div class="admin-row">
+                    <input type="text" class="admin-input" id="cfgRevealEpoch" placeholder="Reveal epoch (blocks, min 2)">
                     <input type="text" class="admin-input" id="cfgAssetId" placeholder="Asset ID">
                     <select class="admin-input" id="cfgPaused" style="max-width:100px;">
                         <option value="0">Active</option>
@@ -1250,7 +1317,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 // ================================================================
 // CONFIGURATION
 // ================================================================
-var CONTRACT_ID = '61d75364cac5522c276ceebdc8d398d04f1dbadbe23dd0b76d061adc607ab95f';
+var CONTRACT_ID = '9703c25ada14139bd682d68ebacf4f9232465bedc5ac22c71a485f29bbf6d43d';
 var GROTH_PER_BEAM = 100000000;
 
 // ================================================================
@@ -1297,12 +1364,6 @@ function formatBeam(g) {
     if (b >= 1000) return b.toFixed(2);
     if (b >= 1) return b.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
     return b.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
-}
-
-function generateCommitment() {
-    var bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
 
 function extractError(err) {
@@ -1468,13 +1529,12 @@ function getResultHistory(callback) {
     callShaderView('user', 'result_history', {}, callback);
 }
 
-function placeBet(amount, betType, exactNum, commitment, onReady, callback) {
+function placeBet(amount, betType, exactNum, onReady, callback) {
     callShaderTx('user', 'place_bet', {
         amount: amount,
         asset_id: 0,
         bet_type: betType,
-        exact_number: exactNum || 0,
-        commitment: commitment
+        exact_number: exactNum || 0
     }, onReady, callback);
 }
 
@@ -1508,6 +1568,10 @@ function resolveBets(count, callback) {
 
 function viewAllBets(callback) {
     callShaderView('manager', 'view_all_bets', {}, callback);
+}
+
+function viewRecentResults(callback) {
+    callShaderView('user', 'view_recent_results', { count: 50 }, callback);
 }
 
 // ================================================================
@@ -1929,10 +1993,8 @@ function doPlaceBet() {
         }
     }
 
-    var commitment = generateCommitment();
-
     // Fire TX immediately — no blocking, no busy state
-    placeBet(amountGroth, selectedBetType, selectedBetType === 2 ? exactNumber : 0, commitment,
+    placeBet(amountGroth, selectedBetType, selectedBetType === 2 ? exactNumber : 0,
         null, // no onReadyForConfirm — wallet dialog pops up on its own
         function(result) {
             if (result && result.error) {
@@ -2052,7 +2114,7 @@ function pollForRevealResult(beforeHistory, attemptsLeft) {
                 // On-chain confirmation arrived — update history and show modal
                 betHistory = newHistory;
                 renderHistory();
-                showRevealModal(newResults[0]);
+                showRevealSummary(newResults);
             } else {
                 // Not confirmed yet — keep polling
                 pollForRevealResult(beforeHistory, attemptsLeft - 1);
@@ -2102,7 +2164,7 @@ function renderPendingBets() {
         html += '<span class="preview-number">#' + uw.result + '</span>';
         html += '<span class="preview-outcome">WON</span>';
         html += '</div>';
-        html += '<button class="reveal-btn claim-btn" onclick="doClaimAll()">CLAIM ' + formatBeam(uw.payout) + ' BEAM</button>';
+        html += '<span class="win-payout">+' + formatBeam(uw.payout) + ' BEAM</span>';
         html += '</div></div>';
     }
 
@@ -2135,7 +2197,7 @@ function renderPendingBets() {
             html += '<span class="preview-number">#' + bet.preview_result + '</span>';
             html += '<span class="preview-outcome">WON</span>';
             html += '</div>';
-            html += '<button class="reveal-btn claim-btn" onclick="doClaimAll()">CLAIM ' + formatBeam(bet.preview_payout) + ' BEAM</button>';
+            html += '<span class="win-payout">+' + formatBeam(bet.preview_payout) + ' BEAM</span>';
         } else if (canReveal) {
             html += '<button class="reveal-btn" onclick="doClaimAll()">REVEAL</button>';
         } else {
@@ -2153,14 +2215,15 @@ function renderPendingBets() {
     var hasContent = activeBets.length > 0 || unclaimedWins.length > 0;
     title.style.display = hasContent ? 'flex' : 'none';
 
-    // CLAIM ALL button — when multiple claimable items exist (pending wins + unclaimed history wins)
+    // CLAIM ALL button — show when any claimable wins exist (pending wins + unclaimed history wins)
     var claimable = activeBets.filter(function(b) { return b.can_reveal === 1 && b.preview_won === 1; });
     var totalClaimable = claimable.length + unclaimedWins.length;
-    if (totalClaimable > 1) {
+    if (totalClaimable >= 1) {
         var totalPayout = 0;
         for (var j = 0; j < claimable.length; j++) totalPayout += claimable[j].preview_payout;
         for (var k = 0; k < unclaimedWins.length; k++) totalPayout += unclaimedWins[k].payout;
-        container.innerHTML += '<button class="reveal-all-btn" onclick="doClaimAll()">CLAIM ALL ' + formatBeam(totalPayout) + ' BEAM (' + totalClaimable + ' wins)</button>';
+        var label = totalClaimable === 1 ? 'CLAIM ' + formatBeam(totalPayout) + ' BEAM' : 'CLAIM ALL ' + formatBeam(totalPayout) + ' BEAM (' + totalClaimable + ' wins)';
+        container.innerHTML += '<button class="reveal-all-btn" onclick="doClaimAll()">' + label + '</button>';
     }
 }
 
@@ -2224,12 +2287,12 @@ function renderHistoryList() {
 
     // Column header row
     html += '<div class="history-header">';
-    html += '<span style="width:72px;min-width:72px">Your Bet</span>';
-    html += '<span style="width:36px;min-width:36px;text-align:center">Roll</span>';
-    html += '<span style="flex:1;text-align:center">Result</span>';
-    html += '<span style="width:80px;min-width:80px;text-align:right">Wager</span>';
-    html += '<span style="width:90px;min-width:90px;text-align:right">Payout</span>';
-    html += '<span style="width:62px;min-width:62px;text-align:right">Block</span>';
+    html += '<span style="width:56px;min-width:56px">Bet</span>';
+    html += '<span style="width:28px;min-width:28px;text-align:center">#</span>';
+    html += '<span style="width:38px;min-width:38px;text-align:center"></span>';
+    html += '<span style="width:66px;min-width:66px;text-align:right">Wager</span>';
+    html += '<span style="width:74px;min-width:74px;text-align:right">Payout</span>';
+    html += '<span style="width:50px;min-width:50px;text-align:right">Block</span>';
     html += '</div>';
 
     // Preview losses at top (auto-resolved, not yet on-chain)
@@ -2237,8 +2300,8 @@ function renderHistoryList() {
         var pl = previewLosses[j];
         var typeClass = betTypeClass(pl.type);
         html += '<div class="history-item lost">';
-        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(pl.type) + ' ' + betTypeName(pl.type);
-        if (pl.type === 2) html += ' #' + pl.exact_number;
+        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(pl.type) + ' ';
+        html += (pl.type === 2) ? '#' + pl.exact_number : betTypeName(pl.type);
         html += '</span>';
         html += '<span class="history-col-result">' + pl.preview_result + '</span>';
         html += '<span class="history-col-outcome loss">Lost</span>';
@@ -2255,8 +2318,8 @@ function renderHistoryList() {
         var typeClass = betTypeClass(h.type);
 
         html += '<div class="history-item ' + (won ? 'won' : 'lost') + '">';
-        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(h.type) + ' ' + betTypeName(h.type);
-        if (h.type === 2) html += ' #' + h.exact_number;
+        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(h.type) + ' ';
+        html += (h.type === 2) ? '#' + h.exact_number : betTypeName(h.type);
         html += '</span>';
         html += '<span class="history-col-result">' + h.result + '</span>';
         html += '<span class="history-col-outcome ' + (won ? 'win' : 'loss') + '">' + (won ? 'Won' : 'Lost') + '</span>';
@@ -2282,22 +2345,16 @@ function renderHistoryList() {
 // RECENT GLOBAL RESULTS (casino-style strip)
 // ================================================================
 function loadGlobalResults() {
-    viewAllBets(function(result) {
+    viewRecentResults(function(result) {
         if (!result || result.error) return;
-        var bets = result.bets || [];
-        // Filter resolved bets only (Won=1, Lost=2, Claimed=3) — must have a result number
-        var resolved = [];
-        for (var i = 0; i < bets.length; i++) {
-            if (bets[i].status > 0 && bets[i].result > 0) {
-                resolved.push(bets[i]);
-            }
-        }
+        var results = result.results || [];
+        // Already filtered by shader (resolved only, result > 0)
         // Sort by revealed_height descending (most recent first)
-        resolved.sort(function(a, b) {
-            return (b.revealed_height || b.created_height || 0) - (a.revealed_height || a.created_height || 0);
+        results.sort(function(a, b) {
+            return (b.revealed_height || 0) - (a.revealed_height || 0);
         });
-        // Take latest 10
-        recentGlobalResults = resolved.slice(0, 10);
+        // Take latest 9
+        recentGlobalResults = results.slice(0, 9);
         renderRecentResults();
     });
 }
@@ -2344,25 +2401,42 @@ function renderPool() {
 // ================================================================
 // RESULT REVEAL MODAL
 // ================================================================
-function showRevealModal(bet) {
-    var won = bet.status === 1 || bet.status === 3;
+function showRevealSummary(results) {
+    var wins = [];
+    var losses = [];
+    var totalPayout = 0;
+    var totalLost = 0;
+
+    for (var i = 0; i < results.length; i++) {
+        var bet = results[i];
+        var won = bet.status === 1 || bet.status === 3;
+        if (won) {
+            wins.push(bet);
+            totalPayout += bet.payout;
+        } else {
+            losses.push(bet);
+            totalLost += bet.amount;
+        }
+    }
 
     document.getElementById('revealLabel').textContent = '';
     document.getElementById('revealNumber').textContent = '';
     document.getElementById('revealNumber').className = 'reveal-number';
 
-    if (won) {
+    if (wins.length > 0) {
         document.getElementById('revealOutcome').textContent = 'CONGRATULATIONS!';
         document.getElementById('revealOutcome').className = 'reveal-outcome win';
-        document.getElementById('revealPayout').textContent = 'You won ' + formatBeam(bet.payout) + ' BEAM';
+        document.getElementById('revealPayout').textContent = 'You won ' + formatBeam(totalPayout) + ' BEAM';
         document.getElementById('revealPayout').style.display = 'block';
-        document.getElementById('revealDetail').textContent = '';
+        var detail = wins.length + ' win' + (wins.length > 1 ? 's' : '');
+        if (losses.length > 0) detail += ', ' + losses.length + ' loss' + (losses.length > 1 ? 'es' : '');
+        document.getElementById('revealDetail').textContent = detail;
         spawnParticles();
     } else {
         document.getElementById('revealOutcome').textContent = 'BETTER LUCK NEXT TIME';
         document.getElementById('revealOutcome').className = 'reveal-outcome loss';
         document.getElementById('revealPayout').style.display = 'none';
-        document.getElementById('revealDetail').textContent = 'Lost ' + formatBeam(bet.amount) + ' BEAM';
+        document.getElementById('revealDetail').textContent = 'Lost ' + formatBeam(totalLost) + ' BEAM (' + losses.length + ' bet' + (losses.length > 1 ? 's' : '') + ')';
     }
 
     document.getElementById('revealOverlay').className = 'reveal-overlay active';
@@ -2413,6 +2487,7 @@ function onLogoClick() {
                 document.getElementById('cfgMaxBet').value = params.max_bet || '';
                 document.getElementById('cfgUpDownMult').value = params.up_down_mult || '';
                 document.getElementById('cfgExactMult').value = params.exact_mult || '';
+                document.getElementById('cfgRevealEpoch').value = params.reveal_epoch || '3';
                 document.getElementById('cfgAssetId').value = params.asset_id || '0';
                 document.getElementById('cfgPaused').value = params.paused ? '1' : '0';
             }
@@ -2480,6 +2555,7 @@ function adminSetConfig() {
         max_bet: parseInt(document.getElementById('cfgMaxBet').value) || 0,
         up_down_mult: parseInt(document.getElementById('cfgUpDownMult').value) || 0,
         exact_mult: parseInt(document.getElementById('cfgExactMult').value) || 0,
+        reveal_epoch: parseInt(document.getElementById('cfgRevealEpoch').value) || 0,
         asset_id: parseInt(document.getElementById('cfgAssetId').value) || 0,
         paused: parseInt(document.getElementById('cfgPaused').value) || 0
     };

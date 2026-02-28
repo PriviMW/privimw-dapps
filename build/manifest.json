@@ -1,6 +1,6 @@
 {
-  "name": "BeamBet",
-  "description": "Confidential on-chain betting DApp. Place bets on random number outcomes with guaranteed fairness.",
+  "name": "PriviBets",
+  "description": "Provably fair on-chain betting by PriviMW. Private. Provable. Fair.",
   "url": "localapp/app/index.html",
   "icon": "localapp/app/appicon.svg",
   "version": "1.0.0",
