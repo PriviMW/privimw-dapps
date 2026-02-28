@@ -35,6 +35,13 @@ struct UserKey {
     }
 };
 
+// Compact history entry for circular buffer (used by view_all and result_history)
+struct HistSlot {
+    uint64_t betId, amount, payout, createdHeight, revealedHeight;
+    uint32_t type, exactNumber, result, status;
+};
+static const uint32_t MAX_HISTORY = 50;
+
 // ============================================================================
 // Schema: Method_0
 // ============================================================================
@@ -131,6 +138,10 @@ BEAM_EXPORT void Method_0()
             }
             {
                 Env::DocGroup grMethod("result_history");
+                Env::DocAddText("cid", "ContractID");
+            }
+            {
+                Env::DocGroup grMethod("view_all");
                 Env::DocAddText("cid", "ContractID");
             }
         }
@@ -242,7 +253,8 @@ void On_place_bet(const ContractID& cid)
     fc.m_Amount = args.m_Amount;
     fc.m_Consume = 1;
 
-    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "BeamBet: place bet", 130000);
+    // nCharge covers: PlaceBet base (~130K) + auto-resolve up to 5 expired bets (~250K) + AdvanceFirstUnresolved (~20K)
+    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "BeamBet: place bet", 400000);
 }
 
 void On_check_results(const ContractID& cid)
@@ -268,55 +280,59 @@ void On_check_results(const ContractID& cid)
     uint64_t totalPayout = 0;
     uint32_t processedCount = 0;
 
-    // Replicate contract Method_3 logic to determine exact payout for FundsChange.
-    // Start from FirstUnresolvedBetId to match contract scan optimization.
-    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && processedCount < 100; betId++)
+    // Batch range scan — one Vars_Enum instead of N individual reads
+    if (s.m_FirstUnresolvedBetId < s.m_NextBetId)
     {
-        Env::Key_T<BeamBet::BetKey> k;
-        k.m_Prefix.m_Cid = cid;
-        k.m_KeyInContract.m_BetId = betId;
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = s.m_FirstUnresolvedBetId;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
-        if (!Env::VarReader::Read_T(k, b)) continue;
-
-        if (_POD_(b.m_UserPk) != args.m_UserPk) continue;
-
-        if (b.m_Status == BeamBet::BetStatus::Pending)
+        while (scanner.MoveNext_T(key, b) && processedCount < 100)
         {
-            if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
+            if (_POD_(b.m_UserPk) != args.m_UserPk) continue;
 
-            Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
-            HashProcessor::Sha256 hp;
-            hp.Write(b.m_Commitment);
-            hp.Write(b.m_PlacementHash);
-            hp.Write(&revealHeight, sizeof(revealHeight));
-            hp.Write(&b.m_BetId, sizeof(b.m_BetId));
-            HashValue resultHash;
-            hp >> resultHash;
-            uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
-            uint8_t result = (rawValue % 100) + 1;
+            if (b.m_Status == BeamBet::BetStatus::Pending)
+            {
+                if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
 
-            bool won = false;
-            switch (b.m_Type) {
-                case 0: won = (result > 50);               break;
-                case 1: won = (result < 51);               break;
-                case 2: won = (result == b.m_ExactNumber); break;
+                Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                HashProcessor::Sha256 hp;
+                hp.Write(b.m_Commitment);
+                hp.Write(b.m_PlacementHash);
+                hp.Write(&revealHeight, sizeof(revealHeight));
+                hp.Write(&b.m_BetId, sizeof(b.m_BetId));
+                HashValue resultHash;
+                hp >> resultHash;
+                uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
+                uint8_t result = (rawValue % 100) + 1;
+
+                bool won = false;
+                switch (b.m_Type) {
+                    case 0: won = (result > 50);               break;
+                    case 1: won = (result < 51);               break;
+                    case 2: won = (result == b.m_ExactNumber); break;
+                }
+
+                if (won) {
+                    totalPayout += (b.m_Amount * b.m_Multiplier) / 100;
+                }
+            }
+            else if (b.m_Status == BeamBet::BetStatus::Won && b.m_Payout > 0)
+            {
+                totalPayout += b.m_Payout;
+            }
+            else
+            {
+                continue;
             }
 
-            if (won) {
-                totalPayout += (b.m_Amount * b.m_Multiplier) / 100;  // Use stored multiplier
-            }
+            processedCount++;
         }
-        else if (b.m_Status == BeamBet::BetStatus::Won && b.m_Payout > 0)
-        {
-            totalPayout += b.m_Payout;
-        }
-        else
-        {
-            continue;
-        }
-
-        processedCount++;
     }
 
     // User must sign to prove ownership (matches AddSig in contract)
@@ -374,31 +390,65 @@ void On_my_bets(const ContractID& cid)
 
     Env::DocArray gr("bets");
 
-    // Start from FirstUnresolvedBetId — pending bets are always at or above this
-    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId; betId++)
+    // Batch range scan — one Vars_Enum instead of N individual reads
+    if (s.m_FirstUnresolvedBetId < s.m_NextBetId)
     {
-        Env::Key_T<BeamBet::BetKey> k;
-        k.m_Prefix.m_Cid = cid;
-        k.m_KeyInContract.m_BetId = betId;
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = s.m_FirstUnresolvedBetId;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
-        if (!Env::VarReader::Read_T(k, b)) continue;
-        if (_POD_(b.m_UserPk) != userPk) continue;
-        if (b.m_Status != BeamBet::BetStatus::Pending) continue;
+        while (scanner.MoveNext_T(key, b))
+        {
+            if (_POD_(b.m_UserPk) != userPk) continue;
+            if (b.m_Status != BeamBet::BetStatus::Pending) continue;
 
-        uint64_t blocksRemaining = 0;
-        if (b.m_CreatedHeight + s.m_RevealEpoch > currentHeight)
-            blocksRemaining = (b.m_CreatedHeight + s.m_RevealEpoch) - currentHeight;
+            uint64_t blocksRemaining = 0;
+            if (b.m_CreatedHeight + s.m_RevealEpoch > currentHeight)
+                blocksRemaining = (b.m_CreatedHeight + s.m_RevealEpoch) - currentHeight;
 
-        Env::DocGroup betGr("");
-        Env::DocAddNum("bet_id", b.m_BetId);
-        Env::DocAddNum("amount", b.m_Amount);
-        Env::DocAddNum("type", (uint32_t)b.m_Type);
-        Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
-        Env::DocAddNum("status", (uint32_t)b.m_Status);
-        Env::DocAddNum("created_height", b.m_CreatedHeight);
-        Env::DocAddNum("blocks_remaining", blocksRemaining);
-        Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+            Env::DocGroup betGr("");
+            Env::DocAddNum("bet_id", b.m_BetId);
+            Env::DocAddNum("amount", b.m_Amount);
+            Env::DocAddNum("type", (uint32_t)b.m_Type);
+            Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
+            Env::DocAddNum("status", (uint32_t)b.m_Status);
+            Env::DocAddNum("created_height", b.m_CreatedHeight);
+            Env::DocAddNum("blocks_remaining", blocksRemaining);
+            Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+
+            // Preview result for ready bets (deterministic — no TX needed to know outcome)
+            if (blocksRemaining == 0)
+            {
+                Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                HashProcessor::Sha256 hp;
+                hp.Write(b.m_Commitment);
+                hp.Write(b.m_PlacementHash);
+                hp.Write(&revealHeight, sizeof(revealHeight));
+                hp.Write(&b.m_BetId, sizeof(b.m_BetId));
+                HashValue resultHash;
+                hp >> resultHash;
+                uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
+                uint8_t result = (rawValue % 100) + 1;
+
+                bool won = false;
+                switch (b.m_Type) {
+                    case 0: won = (result > 50); break;
+                    case 1: won = (result < 51); break;
+                    case 2: won = (result == b.m_ExactNumber); break;
+                }
+
+                Env::DocAddNum("preview_result", (uint32_t)result);
+                Env::DocAddNum("preview_won", (uint32_t)(won ? 1 : 0));
+                if (won) {
+                    Env::DocAddNum("preview_payout", (b.m_Amount * b.m_Multiplier) / 100);
+                }
+            }
+        }
     }
 }
 
@@ -420,43 +470,280 @@ void On_result_history(const ContractID& cid)
         return;
     }
 
-    Env::DocArray gr("history");
+    // Batch range scan with circular buffer for last 50 entries (newest first)
+    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_HISTORY);
+    uint32_t histCount = 0, histWrite = 0;
 
-    // Reverse scan: most recent results first, capped at 50
-    uint32_t shown = 0;
-    uint64_t betId = s.m_NextBetId;
-    while (betId > 0 && shown < 50)
+    if (s.m_NextBetId > 0)
     {
-        betId--;
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = 0;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
-        Env::Key_T<BeamBet::BetKey> k;
-        k.m_Prefix.m_Cid = cid;
-        k.m_KeyInContract.m_BetId = betId;
-
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
-        if (!Env::VarReader::Read_T(k, b)) continue;
-        if (_POD_(b.m_UserPk) != userPk) continue;
-        if (b.m_Status == BeamBet::BetStatus::Pending) continue;
+        while (scanner.MoveNext_T(key, b))
+        {
+            if (_POD_(b.m_UserPk) != userPk) continue;
+            if (b.m_Status == BeamBet::BetStatus::Pending) continue;
+
+            HistSlot& h = histBuf[histWrite];
+            h.betId = b.m_BetId;
+            h.amount = b.m_Amount;
+            h.type = (uint32_t)b.m_Type;
+            h.exactNumber = (uint32_t)b.m_ExactNumber;
+            h.result = (uint32_t)b.m_Result;
+            h.status = (uint32_t)b.m_Status;
+            h.payout = b.m_Payout;
+            h.createdHeight = b.m_CreatedHeight;
+            h.revealedHeight = b.m_RevealedHeight;
+            histWrite = (histWrite + 1) % MAX_HISTORY;
+            if (histCount < MAX_HISTORY) histCount++;
+        }
+    }
+
+    // Output newest first
+    Env::DocArray gr("history");
+    for (uint32_t i = 0; i < histCount; i++)
+    {
+        uint32_t idx = (histWrite + MAX_HISTORY - 1 - i) % MAX_HISTORY;
+        HistSlot& h = histBuf[idx];
 
         Env::DocGroup betGr("");
-        Env::DocAddNum("bet_id", b.m_BetId);
-        Env::DocAddNum("amount", b.m_Amount);
-        Env::DocAddNum("type", (uint32_t)b.m_Type);
-        Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
-        Env::DocAddNum("result", (uint32_t)b.m_Result);
-        Env::DocAddNum("status", (uint32_t)b.m_Status);
-        Env::DocAddNum("payout", b.m_Payout);
-        Env::DocAddNum("created_height", b.m_CreatedHeight);
-        Env::DocAddNum("revealed_height", b.m_RevealedHeight);
+        Env::DocAddNum("bet_id", h.betId);
+        Env::DocAddNum("amount", h.amount);
+        Env::DocAddNum("type", h.type);
+        Env::DocAddNum("exact_number", h.exactNumber);
+        Env::DocAddNum("result", h.result);
+        Env::DocAddNum("status", h.status);
+        Env::DocAddNum("payout", h.payout);
+        Env::DocAddNum("created_height", h.createdHeight);
+        Env::DocAddNum("revealed_height", h.revealedHeight);
 
         const char* statusText = "unknown";
-        if (b.m_Status == BeamBet::BetStatus::Won) statusText = "won";
-        else if (b.m_Status == BeamBet::BetStatus::Lost) statusText = "lost";
-        else if (b.m_Status == BeamBet::BetStatus::Claimed) statusText = "claimed";
+        if (h.status == BeamBet::BetStatus::Won) statusText = "won";
+        else if (h.status == BeamBet::BetStatus::Lost) statusText = "lost";
+        else if (h.status == BeamBet::BetStatus::Claimed) statusText = "claimed";
         Env::DocAddText("status_text", statusText);
-
-        shown++;
     }
+
+    Env::Heap_Free(histBuf);
+}
+
+// Combined view: params + pool + bets + history in ONE call (one state read, one bet scan)
+void On_view_all(const ContractID& cid)
+{
+    Env::Key_T<BeamBet::StateKey> sk;
+    sk.m_Prefix.m_Cid = cid;
+
+    BeamBet::State s;
+    if (!Env::VarReader::Read_T(sk, s))
+    {
+        OnError("Failed to read contract state");
+        return;
+    }
+
+    // === PARAMS ===
+    {
+        Env::DocGroup gr("params");
+        Env::DocAddNum("min_bet", s.m_MinBet);
+        Env::DocAddNum("max_bet", s.m_MaxBet);
+        Env::DocAddNum("up_down_mult", s.m_UpDownMult);
+        Env::DocAddNum("exact_mult", s.m_ExactMult);
+        Env::DocAddNum("reveal_epoch", s.m_RevealEpoch);
+        Env::DocAddNum("paused", (uint32_t)s.m_Paused);
+        Env::DocAddNum("asset_id", s.m_AssetId);
+    }
+
+    // === POOL ===
+    {
+        uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
+        if (s.m_TotalPayouts > total) total = 0;
+        else total -= s.m_TotalPayouts;
+        uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
+        uint64_t available = (reserved <= total) ? (total - reserved) : 0;
+
+        Env::DocGroup gr("pool");
+        Env::DocAddNum("total_deposited", s.m_TotalDeposited);
+        Env::DocAddNum("total_bets", s.m_TotalBets);
+        Env::DocAddNum("total_payouts", s.m_TotalPayouts);
+        Env::DocAddNum("pending_bets", s.m_PendingBets);
+        Env::DocAddNum("pending_max_payout", s.m_PendingMaxPayout);
+        Env::DocAddNum("pending_payouts", s.m_PendingPayouts);
+        Env::DocAddNum("available_balance", available);
+        Env::DocAddNum("asset_id", s.m_AssetId);
+        Env::DocAddNum("paused", (uint32_t)s.m_Paused);
+    }
+
+    // Derive user PK once
+    UserKey uk;
+    _POD_(uk).SetZero();
+    uk.m_Cid = cid;
+    PubKey userPk;
+    uk.DerivePk(userPk);
+
+    Height currentHeight = Env::get_Height();
+
+    // === SINGLE RANGE SCAN for pending bets, unclaimed wins, and history ===
+    // One Vars_Enum call instead of N individual Read_T calls (O(1) vs O(N) node round-trips)
+    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_HISTORY);
+    uint32_t histCount = 0, histWrite = 0;
+
+    // Separate buffer for unclaimed wins — NOT in circular buffer so they never get lost
+    static const uint32_t MAX_UNCLAIMED = 100;
+    HistSlot* unclaimedBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_UNCLAIMED);
+    uint32_t unclaimedCount = 0;
+
+    {
+        Env::DocArray gr("bets");
+        if (s.m_NextBetId > 0)
+        {
+            Env::Key_T<BeamBet::BetKey> k0, k1;
+            k0.m_Prefix.m_Cid = cid;
+            k0.m_KeyInContract.m_BetId = 0;
+            k1.m_Prefix.m_Cid = cid;
+            k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+
+            Env::VarReader scanner(k0, k1);
+            Env::Key_T<BeamBet::BetKey> key;
+            BeamBet::Bet b;
+            while (scanner.MoveNext_T(key, b))
+            {
+                if (_POD_(b.m_UserPk) != userPk) continue;
+
+                if (b.m_Status == BeamBet::BetStatus::Pending)
+                {
+                    // Output pending bet directly to "bets" array
+                    uint64_t blocksRemaining = 0;
+                    if (b.m_CreatedHeight + s.m_RevealEpoch > currentHeight)
+                        blocksRemaining = (b.m_CreatedHeight + s.m_RevealEpoch) - currentHeight;
+
+                    Env::DocGroup betGr("");
+                    Env::DocAddNum("bet_id", b.m_BetId);
+                    Env::DocAddNum("amount", b.m_Amount);
+                    Env::DocAddNum("type", (uint32_t)b.m_Type);
+                    Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
+                    Env::DocAddNum("status", (uint32_t)b.m_Status);
+                    Env::DocAddNum("created_height", b.m_CreatedHeight);
+                    Env::DocAddNum("blocks_remaining", blocksRemaining);
+                    Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+
+                    // Preview result for ready bets (deterministic — no TX needed to know outcome)
+                    if (blocksRemaining == 0)
+                    {
+                        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                        HashProcessor::Sha256 hp;
+                        hp.Write(b.m_Commitment);
+                        hp.Write(b.m_PlacementHash);
+                        hp.Write(&revealHeight, sizeof(revealHeight));
+                        hp.Write(&b.m_BetId, sizeof(b.m_BetId));
+                        HashValue resultHash;
+                        hp >> resultHash;
+                        uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
+                        uint8_t result = (rawValue % 100) + 1;
+
+                        bool won = false;
+                        switch (b.m_Type) {
+                            case 0: won = (result > 50); break;
+                            case 1: won = (result < 51); break;
+                            case 2: won = (result == b.m_ExactNumber); break;
+                        }
+
+                        Env::DocAddNum("preview_result", (uint32_t)result);
+                        Env::DocAddNum("preview_won", (uint32_t)(won ? 1 : 0));
+                        if (won) {
+                            Env::DocAddNum("preview_payout", (b.m_Amount * b.m_Multiplier) / 100);
+                        }
+                    }
+                }
+                else if (b.m_Status == BeamBet::BetStatus::Won)
+                {
+                    // Unclaimed win — buffer separately (never lost to circular overflow)
+                    if (unclaimedCount < MAX_UNCLAIMED)
+                    {
+                        HistSlot& u = unclaimedBuf[unclaimedCount++];
+                        u.betId = b.m_BetId;
+                        u.amount = b.m_Amount;
+                        u.type = (uint32_t)b.m_Type;
+                        u.exactNumber = (uint32_t)b.m_ExactNumber;
+                        u.result = (uint32_t)b.m_Result;
+                        u.status = (uint32_t)b.m_Status;
+                        u.payout = b.m_Payout;
+                        u.createdHeight = b.m_CreatedHeight;
+                        u.revealedHeight = b.m_RevealedHeight;
+                    }
+                }
+                else
+                {
+                    // Lost/Claimed — circular buffer for history (keeps last 50)
+                    HistSlot& h = histBuf[histWrite];
+                    h.betId = b.m_BetId;
+                    h.amount = b.m_Amount;
+                    h.type = (uint32_t)b.m_Type;
+                    h.exactNumber = (uint32_t)b.m_ExactNumber;
+                    h.result = (uint32_t)b.m_Result;
+                    h.status = (uint32_t)b.m_Status;
+                    h.payout = b.m_Payout;
+                    h.createdHeight = b.m_CreatedHeight;
+                    h.revealedHeight = b.m_RevealedHeight;
+                    histWrite = (histWrite + 1) % MAX_HISTORY;
+                    if (histCount < MAX_HISTORY) histCount++;
+                }
+            }
+        }
+    }
+
+    // === UNCLAIMED WINS — always output all of them ===
+    {
+        Env::DocArray gr("unclaimed");
+        for (uint32_t i = 0; i < unclaimedCount; i++)
+        {
+            HistSlot& u = unclaimedBuf[i];
+            Env::DocGroup betGr("");
+            Env::DocAddNum("bet_id", u.betId);
+            Env::DocAddNum("amount", u.amount);
+            Env::DocAddNum("type", u.type);
+            Env::DocAddNum("exact_number", u.exactNumber);
+            Env::DocAddNum("result", u.result);
+            Env::DocAddNum("status", u.status);
+            Env::DocAddNum("payout", u.payout);
+            Env::DocAddNum("created_height", u.createdHeight);
+            Env::DocAddNum("revealed_height", u.revealedHeight);
+            Env::DocAddText("status_text", "won");
+        }
+    }
+
+    // === RESULT HISTORY — output from circular buffer, newest first ===
+    {
+        Env::DocArray gr("history");
+        for (uint32_t i = 0; i < histCount; i++)
+        {
+            uint32_t idx = (histWrite + MAX_HISTORY - 1 - i) % MAX_HISTORY;
+            HistSlot& h = histBuf[idx];
+
+            Env::DocGroup betGr("");
+            Env::DocAddNum("bet_id", h.betId);
+            Env::DocAddNum("amount", h.amount);
+            Env::DocAddNum("type", h.type);
+            Env::DocAddNum("exact_number", h.exactNumber);
+            Env::DocAddNum("result", h.result);
+            Env::DocAddNum("status", h.status);
+            Env::DocAddNum("payout", h.payout);
+            Env::DocAddNum("created_height", h.createdHeight);
+            Env::DocAddNum("revealed_height", h.revealedHeight);
+
+            const char* statusText = "unknown";
+            if (h.status == BeamBet::BetStatus::Lost) statusText = "lost";
+            else if (h.status == BeamBet::BetStatus::Claimed) statusText = "claimed";
+            Env::DocAddText("status_text", statusText);
+        }
+    }
+
+    Env::Heap_Free(unclaimedBuf);
+    Env::Heap_Free(histBuf);
 }
 
 void On_check_result(const ContractID& cid)
@@ -576,46 +863,52 @@ void On_view_all_bets(const ContractID& cid)
 
     Env::DocArray gr("bets");
 
-    for (uint64_t betId = 0; betId < s.m_NextBetId; betId++)
+    // Batch range scan — one Vars_Enum instead of N individual reads
+    if (s.m_NextBetId > 0)
     {
-        Env::Key_T<BeamBet::BetKey> k;
-        k.m_Prefix.m_Cid = cid;
-        k.m_KeyInContract.m_BetId = betId;
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = 0;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
-        if (!Env::VarReader::Read_T(k, b)) continue;
-
-        Env::DocGroup betGr("");
-        Env::DocAddNum("bet_id", b.m_BetId);
-        Env::DocAddBlob_T("user_pk", b.m_UserPk);
-        Env::DocAddNum("amount", b.m_Amount);
-        Env::DocAddNum("asset_id", b.m_AssetId);
-        Env::DocAddNum("type", (uint32_t)b.m_Type);
-        Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
-        Env::DocAddNum("result", (uint32_t)b.m_Result);
-        Env::DocAddNum("status", (uint32_t)b.m_Status);
-        Env::DocAddNum("payout", b.m_Payout);
-        Env::DocAddNum("created_height", b.m_CreatedHeight);
-        Env::DocAddNum("revealed_height", b.m_RevealedHeight);
-
-        if (b.m_Status == BeamBet::BetStatus::Pending)
+        while (scanner.MoveNext_T(key, b))
         {
-            uint64_t readyAt = b.m_CreatedHeight + s.m_RevealEpoch;
-            uint64_t blocksRemaining = (hCurrent < readyAt) ? (readyAt - hCurrent) : 0;
-            Env::DocAddNum("blocks_remaining", blocksRemaining);
-            Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+            Env::DocGroup betGr("");
+            Env::DocAddNum("bet_id", b.m_BetId);
+            Env::DocAddBlob_T("user_pk", b.m_UserPk);
+            Env::DocAddNum("amount", b.m_Amount);
+            Env::DocAddNum("asset_id", b.m_AssetId);
+            Env::DocAddNum("type", (uint32_t)b.m_Type);
+            Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
+            Env::DocAddNum("result", (uint32_t)b.m_Result);
+            Env::DocAddNum("status", (uint32_t)b.m_Status);
+            Env::DocAddNum("payout", b.m_Payout);
+            Env::DocAddNum("created_height", b.m_CreatedHeight);
+            Env::DocAddNum("revealed_height", b.m_RevealedHeight);
+
+            if (b.m_Status == BeamBet::BetStatus::Pending)
+            {
+                uint64_t readyAt = b.m_CreatedHeight + s.m_RevealEpoch;
+                uint64_t blocksRemaining = (hCurrent < readyAt) ? (readyAt - hCurrent) : 0;
+                Env::DocAddNum("blocks_remaining", blocksRemaining);
+                Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+            }
+
+            const char* statusText = "pending";
+            if (b.m_Status == BeamBet::BetStatus::Won)     statusText = "won";
+            else if (b.m_Status == BeamBet::BetStatus::Lost)    statusText = "lost";
+            else if (b.m_Status == BeamBet::BetStatus::Claimed) statusText = "claimed";
+            Env::DocAddText("status_text", statusText);
+
+            const char* typeText = "exact";
+            if (b.m_Type == 0)      typeText = "up";
+            else if (b.m_Type == 1) typeText = "down";
+            Env::DocAddText("type_text", typeText);
         }
-
-        const char* statusText = "pending";
-        if (b.m_Status == BeamBet::BetStatus::Won)     statusText = "won";
-        else if (b.m_Status == BeamBet::BetStatus::Lost)    statusText = "lost";
-        else if (b.m_Status == BeamBet::BetStatus::Claimed) statusText = "claimed";
-        Env::DocAddText("status_text", statusText);
-
-        const char* typeText = "exact";
-        if (b.m_Type == 0)      typeText = "up";
-        else if (b.m_Type == 1) typeText = "down";
-        Env::DocAddText("type_text", typeText);
     }
 }
 
@@ -789,6 +1082,8 @@ BEAM_EXPORT void Method_1()
             return On_my_bets(cid);
         if (!Env::Strcmp(szAction, "result_history"))
             return On_result_history(cid);
+        if (!Env::Strcmp(szAction, "view_all"))
+            return On_view_all(cid);
 
         return OnError("Invalid action");
     }

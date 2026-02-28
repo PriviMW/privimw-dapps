@@ -110,6 +110,31 @@ void AccumulateClaim(Bet& b, State& s, uint64_t& totalPayout) {
     }
 }
 
+// Auto-resolve expired pending bets (piggybacked onto user interactions)
+// Resolves up to maxCount expired bets from FirstUnresolvedBetId.
+// No FundsUnlock — only reveals results. Won bets wait for user to claim.
+void AutoResolveExpired(State& s, uint32_t maxCount) {
+    Height hCurrent = Env::get_Height();
+    uint32_t resolved = 0;
+
+    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && resolved < maxCount; betId++) {
+        BetKey bk;
+        bk.m_BetId = betId;
+
+        Bet b;
+        if (!Env::LoadVar_T(bk, b)) continue;
+        if (b.m_Status != BetStatus::Pending) continue;
+        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) break; // remaining bets are newer, stop
+
+        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+        uint8_t result = CalculateRandomResult(b.m_Commitment, b.m_PlacementHash, revealHeight, b.m_BetId);
+        ProcessBetResult(b, result, s);
+
+        Env::SaveVar_T(bk, b);
+        resolved++;
+    }
+}
+
 // Advance m_FirstUnresolvedBetId past resolved bets (capped per call for charge safety)
 void AdvanceFirstUnresolved(State& s, uint32_t maxAdvance = 50) {
     uint32_t count = 0;
@@ -223,10 +248,14 @@ BEAM_EXPORT void Method_2(const BeamBet::Method::PlaceBet& r)
     s.m_PendingBets += r.m_Amount;
     s.m_PendingMaxPayout += maxPayout;
 
-    // Save bet and state
+    // Save bet
     BeamBet::BetKey bk;
     bk.m_BetId = b.m_BetId;
     Env::SaveVar_T(bk, b);
+
+    // Auto-resolve up to 5 expired bets while we're here
+    BeamBet::AutoResolveExpired(s, 5);
+    BeamBet::AdvanceFirstUnresolved(s, 10);
 
     BeamBet::SaveState();
 }

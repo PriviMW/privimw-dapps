@@ -217,6 +217,119 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     margin-top: 20px;
 }
 .section-title:first-child { margin-top: 0; }
+.section-title-row {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    -webkit-align-items: center;
+    justify-content: space-between;
+    -webkit-justify-content: space-between;
+    margin-bottom: 10px;
+    margin-top: 20px;
+}
+.section-title-row .section-title {
+    margin: 0;
+}
+.refresh-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 4px 8px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    -webkit-align-items: center;
+}
+.refresh-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-teal);
+    background: var(--bg-hover);
+}
+.refresh-btn.spinning .refresh-icon {
+    animation: spin 0.8s linear;
+    -webkit-animation: spin 0.8s linear;
+}
+.refresh-icon {
+    display: inline-block;
+    margin-right: 4px;
+    font-size: 0.75rem;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@-webkit-keyframes spin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }
+
+/* ==================== RECENT RESULTS STRIP ==================== */
+.recent-results {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+.recent-results-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+.recent-results-row {
+    display: flex;
+    display: -webkit-flex;
+    -webkit-justify-content: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    -webkit-flex-wrap: wrap;
+}
+.result-bubble {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    display: -webkit-flex;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-justify-content: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin: 0 3px;
+    position: relative;
+}
+.result-bubble.up {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.result-bubble.down {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.result-bubble.exact-50 {
+    background: rgba(234, 179, 8, 0.15);
+    color: var(--accent-gold);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.result-bubble .result-arrow {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    font-size: 0.5rem;
+    opacity: 0.7;
+}
+.recent-results-empty {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px 0;
+}
 
 /* ==================== BET TYPE SELECTOR ==================== */
 .bet-types {
@@ -231,7 +344,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .bet-type-btn {
     flex: 1;
     -webkit-flex: 1;
-    padding: 10px 8px;
+    padding: 10px 8px 8px;
     border-radius: var(--radius-md);
     font-weight: 600;
     font-size: 0.85rem;
@@ -256,6 +369,13 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     box-shadow: 0 0 12px var(--gold-glow);
 }
 .bet-type-icon { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+.bet-type-mult {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 500;
+    opacity: 0.7;
+    margin-top: 2px;
+}
 
 /* ==================== BET CARD ==================== */
 .bet-card {
@@ -533,23 +653,41 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .reveal-all-btn:hover { background: rgba(37,194,160,0.1); }
 .reveal-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Optimistic card */
-.pending-card.optimistic {
-    border-color: rgba(68,138,255,0.25);
-    opacity: 0.8;
-}
-.optimistic-fill {
-    width: 40%;
-    background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
-    animation: shimmer 1.4s ease infinite;
-}
-.optimistic-status {
-    font-size: 0.72rem;
-    color: var(--accent-blue);
+/* Preview result on pending cards */
+.preview-result {
+    display: -webkit-flex;
+    display: flex;
+    -webkit-align-items: center;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
     font-weight: 600;
-    animation: pulse 1.5s ease infinite;
 }
+.preview-result .preview-number {
+    margin-right: 6px;
+    font-size: 1rem;
+}
+.preview-result.win { color: var(--accent-green); }
+.preview-result.loss { color: var(--accent-red); }
+.preview-result .preview-outcome {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 8px;
+}
+.preview-result.win .preview-outcome { background: rgba(16,185,129,0.15); }
+.preview-result.loss .preview-outcome { background: rgba(239,68,68,0.15); }
+.claim-btn {
+    background: var(--accent-green) !important;
+    white-space: nowrap;
+}
+.claim-btn:hover { background: #059669 !important; box-shadow: 0 0 12px var(--green-glow) !important; }
+.pending-card.preview-won { border-color: var(--accent-green); }
+.pending-card.preview-lost { border-color: var(--accent-red); animation: none; }
 
+/* Optimistic card */
 /* ==================== HISTORY ==================== */
 .history-stats {
     display: flex;
@@ -575,57 +713,92 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .stat-value.win { color: var(--accent-green); }
 .stat-value.loss { color: var(--accent-red); }
 .history-list {
-    max-height: 280px;
+    max-height: 320px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+}
+.history-header {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    -webkit-align-items: center;
+    padding: 6px 12px 6px 15px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
 }
 .history-item {
     display: flex;
     display: -webkit-flex;
     align-items: center;
     -webkit-align-items: center;
-    padding: 10px 12px;
+    padding: 8px 12px;
     background: var(--bg-card);
     border-radius: var(--radius-sm);
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     border-left: 3px solid var(--border-color);
     transition: background var(--transition);
 }
 .history-item:hover { background: var(--bg-hover); }
 .history-item.won { border-left-color: var(--accent-green); }
 .history-item.lost { border-left-color: var(--accent-red); }
-.history-type {
+.history-col-type {
     font-weight: 600;
-    font-size: 0.78rem;
-    min-width: 50px;
+    font-size: 0.75rem;
+    width: 72px;
+    min-width: 72px;
 }
-.history-type.up { color: var(--accent-green); }
-.history-type.down { color: var(--accent-red); }
-.history-type.exact { color: var(--accent-gold); }
-.history-result {
+.history-col-type.up { color: var(--accent-green); }
+.history-col-type.down { color: var(--accent-red); }
+.history-col-type.exact { color: var(--accent-gold); }
+.history-col-result {
+    width: 36px;
+    min-width: 36px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.history-col-outcome {
     flex: 1;
     -webkit-flex: 1;
     text-align: center;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     font-weight: 600;
+    text-transform: uppercase;
 }
-.history-amount {
+.history-col-outcome.win { color: var(--accent-green); }
+.history-col-outcome.loss { color: var(--accent-red); }
+.history-col-bet {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
-    min-width: 60px;
+    width: 80px;
+    min-width: 80px;
     text-align: right;
 }
-.history-payout {
+.history-col-payout {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    min-width: 70px;
+    width: 90px;
+    min-width: 90px;
     text-align: right;
 }
-.history-payout.win { color: var(--accent-green); }
-.history-payout.loss { color: var(--accent-red); }
+.history-col-payout.win { color: var(--accent-green); }
+.history-col-payout.loss { color: var(--accent-red); }
+.history-col-height {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    width: 62px;
+    min-width: 62px;
+    text-align: right;
+}
 .empty-state {
     text-align: center;
     padding: 24px 16px;
@@ -807,10 +980,18 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 .toast-container {
     position: fixed;
     bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-flex-direction: column;
+    flex-direction: column;
+    -webkit-align-items: center;
+    align-items: center;
+    pointer-events: none;
     z-index: 10001;
 }
+.toast { pointer-events: auto; }
 .toast {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -893,16 +1074,25 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
             <span id="connectText">Connecting to Beam Wallet...</span>
         </div>
 
+        <!-- Recent Results Strip -->
+        <div class="recent-results" id="recentResults" style="display:none">
+            <div class="recent-results-label">Latest Results</div>
+            <div class="recent-results-row" id="recentResultsRow"></div>
+        </div>
+
         <!-- Bet Type Selector -->
         <div class="bet-types">
             <button class="bet-type-btn active-up" data-type="0" onclick="selectBetType(0)">
                 <span class="bet-type-icon">&#9650;</span> UP
+                <span class="bet-type-mult" id="multUp"></span>
             </button>
             <button class="bet-type-btn" data-type="1" onclick="selectBetType(1)">
                 <span class="bet-type-icon">&#9660;</span> DOWN
+                <span class="bet-type-mult" id="multDown"></span>
             </button>
             <button class="bet-type-btn" data-type="2" onclick="selectBetType(2)">
                 <span class="bet-type-icon">&#9733;</span> EXACT
+                <span class="bet-type-mult" id="multExact"></span>
             </button>
         </div>
 
@@ -952,7 +1142,12 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
         </div>
 
         <!-- Active Bets -->
-        <div class="section-title" id="pendingTitle" style="display:none;">Active Bets</div>
+        <div class="section-title-row" id="pendingTitle" style="display:none;">
+            <div class="section-title">Active Bets</div>
+            <button class="refresh-btn" onclick="doManualRefresh(this)" title="Refresh data">
+                <span class="refresh-icon">&#x21bb;</span> Refresh
+            </button>
+        </div>
         <div class="pending-list" id="pendingList"></div>
 
         <!-- History -->
@@ -1055,7 +1250,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 // ================================================================
 // CONFIGURATION
 // ================================================================
-var CONTRACT_ID = '3e7eb498ec325a748211d5a015477b121e53c8764a9f0c119ae5971d271cbfeb';
+var CONTRACT_ID = '61d75364cac5522c276ceebdc8d398d04f1dbadbe23dd0b76d061adc607ab95f';
 var GROTH_PER_BEAM = 100000000;
 
 // ================================================================
@@ -1075,11 +1270,14 @@ var params = null; // { min_bet, max_bet, up_down_mult, exact_mult, reveal_epoch
 var pool = null;   // { available_balance, pending_bets, pending_max_payout, pending_payouts, ... }
 var pendingBets = [];
 var betHistory = [];
+var unclaimedWins = [];
+var previewLosses = [];
+var recentGlobalResults = [];
 
 // UI state
 var selectedBetType = 0; // 0=up, 1=down, 2=exact
 var exactNumber = 50;
-var optimisticBet = null;
+var currentHeight = 0;
 var logoClickCount = 0;
 var logoClickTimer = null;
 
@@ -1157,6 +1355,15 @@ function handleApiResult(json) {
         return;
     }
 
+    // Handle wallet event pushes (no matching callback ID)
+    // ev_system_state fires on new block, ev_txs_changed on TX status change
+    if (answer.result) {
+        if (answer.result.ev_system_state || answer.result.ev_txs_changed) {
+            onWalletEvent(answer.result);
+            // Don't return — could also have a matching callback
+        }
+    }
+
     var info = apiCallbacks.get(answer.id);
     if (!info) return;
     apiCallbacks.delete(answer.id);
@@ -1196,16 +1403,11 @@ function handleApiResult(json) {
 // ================================================================
 // SHADER CALLS
 // ================================================================
-function invokeShader(args, callback, includeBytes) {
+function invokeShader(args, callback, withBytes) {
     var apiParams = { args: args, create_tx: false };
-
-    // Send shader bytes when requested — caller decides
-    // View calls: no bytes (parallel-safe, shader cached from prime call)
-    // TX calls: always bytes (single call, ensures wallet has shader)
-    if (includeBytes && shaderBytes) {
+    if (withBytes && shaderBytes) {
         apiParams.contract = shaderBytes;
     }
-
     callApi('invoke_contract', apiParams, callback);
 }
 
@@ -1213,7 +1415,6 @@ function processInvokeData(rawData, callback) {
     callApi('process_invoke_data', { data: rawData }, callback);
 }
 
-// Build args string
 function buildArgs(role, action, extra) {
     var parts = ['role=' + role, 'action=' + action];
     if (extra) {
@@ -1227,35 +1428,32 @@ function buildArgs(role, action, extra) {
     return parts.join(',');
 }
 
-// Two-step TX helper — includes bytes (single user-initiated call = fast)
 function callShaderTx(role, action, extra, onReadyForConfirm, callback) {
     var args = buildArgs(role, action, extra);
     invokeShader(args, function(result) {
-        if (result && result.error) {
-            callback(result);
-            return;
-        }
+        if (result && result.error) { callback(result); return; }
         if (result && result.raw_data) {
             if (onReadyForConfirm) onReadyForConfirm();
             processInvokeData(result.raw_data, callback);
         } else {
             callback(result);
         }
-    }, true);
+    }, false);
 }
 
-// View call helper — no bytes (parallel-safe, shader cached from prime)
 function callShaderView(role, action, extra, callback) {
-    var args = buildArgs(role, action, extra);
-    invokeShader(args, callback, false);
+    invokeShader(buildArgs(role, action, extra), callback, false);
 }
 
 // ================================================================
 // DAPP API WRAPPERS
 // ================================================================
 function viewParams(callback) {
-    var args = buildArgs('user', 'view_params', {});
-    invokeShader(args, callback, true); // include bytes — primes shader
+    invokeShader(buildArgs('user', 'view_params', {}), callback, true);
+}
+
+function viewAll(callback) {
+    invokeShader(buildArgs('user', 'view_all', {}), callback, true);
 }
 
 function viewPool(callback) {
@@ -1368,29 +1566,53 @@ function detectAndConnect() {
     if (initLock) return;
     initLock = true;
 
-    setConnectText('Loading shader...');
-    loadShaderBytes(function(err) {
-        if (err) {
-            showError(err);
-            return;
+    setConnectText('Connecting to Beam Wallet...');
+
+    if (typeof qt !== 'undefined') {
+        initDesktopWallet();
+    } else if (window.BEAM) {
+        BEAM = window.BEAM;
+        if (/android/i.test(navigator.userAgent)) {
+            document.addEventListener('onCallWalletApiResult', function(ev) { handleApiResult(ev.detail); });
+        } else if (typeof BEAM.callWalletApiResult === 'function') {
+            BEAM.callWalletApiResult(handleApiResult);
         }
+        onWalletConnected();
+    } else {
+        showError('No Beam Wallet detected. Open this DApp from within the Beam Desktop Wallet.');
+    }
+}
 
-        setConnectText('Connecting to Beam Wallet...');
+function applyViewAll(result) {
+    if (result.params) {
+        params = result.params;
+        updateBetLimits();
+        updatePayoutPreview();
+        updatePlaceButton();
+    }
+    if (result.pool) {
+        pool = result.pool;
+        renderPool();
+    }
+    pendingBets = result.bets || [];
+    unclaimedWins = result.unclaimed || [];
+    betHistory = result.history || [];
+    renderPendingBets();
+    renderHistory();
+    hideConnectBanner();
 
-        if (typeof qt !== 'undefined') {
-            initDesktopWallet();
-        } else if (window.BEAM) {
-            BEAM = window.BEAM;
-            if (/android/i.test(navigator.userAgent)) {
-                document.addEventListener('onCallWalletApiResult', function(ev) { handleApiResult(ev.detail); });
-            } else if (typeof BEAM.callWalletApiResult === 'function') {
-                BEAM.callWalletApiResult(handleApiResult);
-            }
-            onWalletConnected();
-        } else {
-            showError('No Beam Wallet detected. Open this DApp from within the Beam Desktop Wallet.');
+    // Load global results for casino strip
+    loadGlobalResults();
+
+    callApi('wallet_status', {}, function(r) {
+        if (r && r.current_height) {
+            currentHeight = r.current_height;
+            document.getElementById('blockHeight').textContent = r.current_height.toLocaleString();
         }
     });
+
+    subscribeToEvents();
+    startPolling();
 }
 
 function onWalletConnected() {
@@ -1398,87 +1620,134 @@ function onWalletConnected() {
     document.getElementById('statusDot').className = 'status-dot connected';
     document.getElementById('statusDot').title = 'Connected';
 
-    setConnectText('Loading contract...');
-
-    // Step 1: Prime shader (sends bytes — must finish before parallel calls)
-    viewParams(function(result) {
-        if (result && result.error) {
-            setConnectText('Shader error: ' + extractError(result));
+    // Fast path: try WITHOUT bytes (instant if shader cached from previous session)
+    invokeShader(buildArgs('user', 'view_all', {}), function(result) {
+        if (result && !result.error && result.params) {
+            // Shader was cached — instant load
+            applyViewAll(result);
             return;
         }
 
-        var p = result.params || result;
-        params = p;
-        updateBetLimits();
-        updatePayoutPreview();
-        updatePlaceButton();
-        hideConnectBanner();
-
-        // Step 2: Parallel data loads (no bytes — shader cached, instant)
-        getMyBets(function(r) {
-            if (r && !r.error) {
-                pendingBets = r.bets || [];
-                renderPendingBets();
-            }
+        // Shader not cached — load bytes, then compile
+        setConnectText('Loading contract...');
+        loadShaderBytes(function(err) {
+            if (err) { setConnectText('Error: ' + err); return; }
+            viewAll(function(result2) {
+                if (result2 && result2.error) {
+                    setConnectText('Shader error: ' + extractError(result2));
+                    return;
+                }
+                applyViewAll(result2);
+            });
         });
-
-        getResultHistory(function(r) {
-            if (r && !r.error) {
-                betHistory = r.history || [];
-                renderHistory();
-            }
-        });
-
-        viewPool(function(r) {
-            if (r && !r.error) {
-                pool = r.pool || r;
-                renderPool();
-            }
-        });
-
-        callApi('wallet_status', {}, function(r) {
-            if (r && r.current_height) {
-                document.getElementById('blockHeight').textContent = r.current_height.toLocaleString();
-            }
-        });
-
-        startPolling();
-    });
+    }, false);
 }
 
 // ================================================================
-// POLLING
+// LIVE UPDATES — Event subscriptions + polling fallback
 // ================================================================
 var pollInterval = null;
+var refreshInFlight = false;
+var lastRefreshTime = 0;
+var REFRESH_COOLDOWN = 2000; // Min ms between refreshes to avoid flooding
+
+function subscribeToEvents() {
+    // Subscribe to new blocks and TX status changes
+    callApi('ev_subunsub', { ev_system_state: true, ev_txs_changed: true }, function(r) {
+        // Subscription confirmed (or silently ignored if wallet doesn't support it)
+    });
+}
+
+function onWalletEvent(result) {
+    // Wallet pushed a block or TX event — refresh all data
+    if (result.ev_system_state) {
+        // New block mined — update height display immediately
+        if (result.current_height) {
+            currentHeight = result.current_height;
+            document.getElementById('blockHeight').textContent = result.current_height.toLocaleString();
+        }
+    }
+    // Bypass cooldown — wallet events are authoritative signals that on-chain state changed
+    lastRefreshTime = 0;
+    refreshAllData();
+}
+
+function refreshAllData() {
+    if (!isConnected) return;
+    var now = Date.now();
+    if (now - lastRefreshTime < REFRESH_COOLDOWN) return; // Throttle
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    lastRefreshTime = now;
+
+    viewAll(function(r) {
+        refreshInFlight = false;
+        if (!r || r.error) return;
+
+        // === STEP 1: Update ALL data state before any rendering ===
+        // This prevents render functions from seeing stale data
+        // (e.g., renderPendingBets needs betHistory for unclaimed wins)
+
+        if (r.pool) { pool = r.pool; }
+        if (r.params) { params = r.params; }
+
+        var newBets = r.bets || [];
+        var betsChanged = JSON.stringify(newBets) !== JSON.stringify(pendingBets);
+        if (betsChanged) { pendingBets = newBets; }
+
+        var newUnclaimed = r.unclaimed || [];
+        var unclaimedChanged = JSON.stringify(newUnclaimed) !== JSON.stringify(unclaimedWins);
+        if (unclaimedChanged) { unclaimedWins = newUnclaimed; }
+
+        var newHistory = r.history || [];
+        var historyChanged = JSON.stringify(newHistory) !== JSON.stringify(betHistory);
+        if (historyChanged) { betHistory = newHistory; }
+
+        // === STEP 2: Render everything that changed ===
+        if (r.pool) { renderPool(); }
+        if (r.params) {
+            updateBetLimits();
+            updatePayoutPreview();
+            updatePlaceButton();
+        }
+
+        if (betsChanged || historyChanged || unclaimedChanged) {
+            renderPendingBets();
+        }
+
+        if (betsChanged || historyChanged || unclaimedChanged) {
+            renderHistory();
+            // Also refresh global results strip when bets change
+            loadGlobalResults();
+        }
+    });
+}
+
+function scheduleRefresh() {
+    // After a TX, data won't change until it confirms on-chain (~60s on DAPPNET, 1 block).
+    // Refresh immediately, then retry at intervals that cover the full confirmation window.
+    refreshAllData();
+    [5000, 15000, 30000, 45000, 60000, 90000].forEach(function(delay) {
+        setTimeout(function() { lastRefreshTime = 0; refreshAllData(); }, delay);
+    });
+}
+
+function doManualRefresh(btn) {
+    // Manual refresh — bypass cooldown, force full data reload
+    if (btn) {
+        btn.classList.add('spinning');
+        setTimeout(function() { btn.classList.remove('spinning'); }, 800);
+    }
+    lastRefreshTime = 0;
+    refreshAllData();
+}
 
 function startPolling() {
     if (pollInterval) clearInterval(pollInterval);
+    // Polling as fallback — events are primary, this catches anything missed
     pollInterval = setInterval(function() {
-        if (!isConnected) return;
-
-        getMyBets(function(r) {
-            if (r && !r.error) {
-                var newBets = r.bets || [];
-                // Only re-render if data changed
-                if (JSON.stringify(newBets) !== JSON.stringify(pendingBets)) {
-                    pendingBets = newBets;
-                    renderPendingBets();
-                }
-                // Check if optimistic bet landed
-                if (optimisticBet && newBets.length >= optimisticBet.expectedCount) {
-                    optimisticBet = null;
-                    renderPendingBets();
-                }
-            }
-        });
-
-        // Update block height
-        callApi('wallet_status', {}, function(r) {
-            if (r && r.current_height) {
-                document.getElementById('blockHeight').textContent = r.current_height.toLocaleString();
-            }
-        });
-    }, 5000);
+        refreshAllData();
+    }, 10000); // 10s fallback (events handle the fast path)
 }
 
 // ================================================================
@@ -1583,6 +1852,18 @@ function updatePayoutPreview() {
     // Color by bet type
     var colors = { 0: 'var(--accent-green)', 1: 'var(--accent-red)', 2: 'var(--accent-gold)' };
     document.getElementById('payoutValue').style.color = colors[selectedBetType];
+
+    // Update multiplier labels on bet type buttons
+    updateMultiplierLabels();
+}
+
+function updateMultiplierLabels() {
+    if (!params) return;
+    var udMult = (params.up_down_mult / 100).toFixed(1) + 'x';
+    var exMult = (params.exact_mult / 100).toFixed(0) + 'x';
+    document.getElementById('multUp').textContent = udMult;
+    document.getElementById('multDown').textContent = udMult;
+    document.getElementById('multExact').textContent = exMult;
 }
 
 function updateBetLimits() {
@@ -1617,6 +1898,37 @@ function doPlaceBet() {
     if (isNaN(amount) || amount <= 0) return;
 
     var amountGroth = beamToGroth(amount);
+
+    // Validate bet limits
+    if (params.min_bet && amountGroth < params.min_bet) {
+        showToast('Minimum bet is ' + grothToBeam(params.min_bet) + ' BEAM', 'error');
+        return;
+    }
+    if (params.max_bet && amountGroth > params.max_bet) {
+        showToast('Maximum bet is ' + grothToBeam(params.max_bet) + ' BEAM', 'error');
+        return;
+    }
+
+    // Validate pool can cover payout
+    if (pool) {
+        var mult = selectedBetType === 2 ? params.exact_mult : params.up_down_mult;
+        var maxPayout = (amountGroth * mult) / 100;
+        var avail = pool.available_balance;
+        if (avail === undefined) {
+            var td = pool.total_deposited || 0;
+            var tb = pool.total_bets || 0;
+            var tp = pool.total_payouts || 0;
+            var pb = pool.pending_bets || 0;
+            var pmp = pool.pending_max_payout || 0;
+            var pp = pool.pending_payouts || 0;
+            avail = td + tb - tp - pb - pmp - pp;
+        }
+        if (maxPayout > avail) {
+            showToast('Pool cannot cover payout. Max bet: ' + grothToBeam(Math.floor(avail * 100 / mult)) + ' BEAM', 'error');
+            return;
+        }
+    }
+
     var commitment = generateCommitment();
 
     // Fire TX immediately — no blocking, no busy state
@@ -1630,19 +1942,8 @@ function doPlaceBet() {
 
             showToast('Bet placed!', 'success');
 
-            // Optimistic bet card
-            optimisticBet = {
-                betType: selectedBetType,
-                amount: amountStr,
-                exactNumber: exactNumber,
-                expectedCount: pendingBets.length + 1
-            };
-            renderPendingBets();
-
-            // Refresh pool
-            viewPool(function(r) {
-                if (r && !r.error) { pool = r.pool || r; renderPool(); }
-            });
+            // Refresh all data — immediate + delayed retries for on-chain confirmation
+            scheduleRefresh();
         }
     );
 }
@@ -1654,7 +1955,7 @@ function doPlaceBet() {
 function doRevealSingle(betId) {
     var beforeHistory = betHistory.slice();
 
-    checkResult(betId,
+    checkResults(
         null,
         function(result) {
             if (result && result.error) {
@@ -1663,6 +1964,24 @@ function doRevealSingle(betId) {
             }
 
             showToast('Bet revealed!', 'success');
+            refreshAfterReveal(betId, beforeHistory);
+        }
+    );
+}
+
+// Claim winnings — uses checkResults (claim all) to piggyback lost bets cleanup
+function doClaimSingle(betId) {
+    var beforeHistory = betHistory.slice();
+
+    checkResults(
+        null,
+        function(result) {
+            if (result && result.error) {
+                showToast('Claim failed: ' + extractError(result), 'error');
+                return;
+            }
+
+            showToast('Winnings claimed!', 'success');
             refreshAfterReveal(betId, beforeHistory);
         }
     );
@@ -1685,42 +2004,61 @@ function doRevealAll() {
     );
 }
 
-function refreshAfterReveal(targetBetId, beforeHistory) {
-    // Refresh pending + history
-    getMyBets(function(r) {
-        if (r && !r.error) {
-            pendingBets = r.bets || [];
-            renderPendingBets();
+// Claim all — processes all ready bets in one TX (claims wins, resolves losses)
+function doClaimAll() {
+    var beforeHistory = betHistory.slice();
+
+    checkResults(
+        null,
+        function(result) {
+            if (result && result.error) {
+                showToast('Claim failed: ' + extractError(result), 'error');
+                return;
+            }
+
+            showToast('Winnings claimed!', 'success');
+            refreshAfterReveal(null, beforeHistory);
         }
-    });
+    );
+}
 
-    getResultHistory(function(r) {
-        if (r && !r.error) {
-            betHistory = r.history || [];
-            renderHistory();
+function refreshAfterReveal(targetBetId, beforeHistory) {
+    // Schedule full data retries — TX takes ~60s to confirm on-chain
+    scheduleRefresh();
 
-            // Find newly revealed bets for animation
+    // Also poll specifically for history change to show the result modal
+    // as soon as the claimed bet appears in history
+    pollForRevealResult(beforeHistory, 12); // up to 12 attempts × 8s = ~96s
+}
+
+function pollForRevealResult(beforeHistory, attemptsLeft) {
+    if (attemptsLeft <= 0) return;
+    setTimeout(function() {
+        getResultHistory(function(r) {
+            if (!r || r.error) { pollForRevealResult(beforeHistory, attemptsLeft - 1); return; }
+            var newHistory = r.history || [];
+
+            // Find newly appeared results (not in beforeHistory)
             var newResults = [];
-            for (var i = 0; i < betHistory.length; i++) {
+            for (var i = 0; i < newHistory.length; i++) {
                 var found = false;
                 for (var j = 0; j < beforeHistory.length; j++) {
-                    if (beforeHistory[j].bet_id === betHistory[i].bet_id) { found = true; break; }
+                    if (beforeHistory[j].bet_id === newHistory[i].bet_id) { found = true; break; }
                 }
-                if (!found) newResults.push(betHistory[i]);
+                if (!found) newResults.push(newHistory[i]);
             }
 
             if (newResults.length > 0) {
-                // Show first result (most recent)
-                var latest = newResults[0];
-                showRevealModal(latest);
+                // On-chain confirmation arrived — update history and show modal
+                betHistory = newHistory;
+                renderHistory();
+                showRevealModal(newResults[0]);
+            } else {
+                // Not confirmed yet — keep polling
+                pollForRevealResult(beforeHistory, attemptsLeft - 1);
             }
-        }
-    });
-
-    // Refresh pool
-    viewPool(function(r) {
-        if (r && !r.error) { pool = r.pool || r; renderPool(); }
-    });
+        });
+    }, 8000); // check every 8s
 }
 
 // ================================================================
@@ -1731,28 +2069,59 @@ function renderPendingBets() {
     var title = document.getElementById('pendingTitle');
     var html = '';
 
-    // Optimistic card
-    if (optimisticBet) {
-        html += '<div class="pending-card optimistic">';
+    // Separate bets: active (waiting + claimable wins) vs auto-resolved (preview losses)
+    var activeBets = [];
+    previewLosses = []; // global — used by renderHistory to show in history
+    for (var i = 0; i < pendingBets.length; i++) {
+        var bet = pendingBets[i];
+        var hasPreview = bet.can_reveal === 1 && bet.preview_result !== undefined;
+        var previewLost = hasPreview && bet.preview_won !== 1;
+        if (previewLost) {
+            previewLosses.push(bet);
+        } else {
+            activeBets.push(bet);
+        }
+    }
+
+    // unclaimedWins comes from the shader's "unclaimed" array (global var)
+    // These are Won bets not yet claimed — always returned fully (not subject to history circular buffer)
+
+    // Unclaimed wins from history (auto-resolved by place_bet, need claiming)
+    for (var u = 0; u < unclaimedWins.length; u++) {
+        var uw = unclaimedWins[u];
+        var typeClass = betTypeClass(uw.type);
+        html += '<div class="pending-card preview-won">';
         html += '<div class="pending-top">';
-        html += '<span class="pending-type ' + betTypeClass(optimisticBet.betType) + '">' + betTypeIcon(optimisticBet.betType) + ' ' + betTypeName(optimisticBet.betType);
-        if (optimisticBet.betType === 2) html += ' #' + optimisticBet.exactNumber;
+        html += '<span class="pending-type ' + typeClass + '">' + betTypeIcon(uw.type) + ' ' + betTypeName(uw.type);
+        if (uw.type === 2) html += ' #' + uw.exact_number;
         html += '</span>';
-        html += '<span class="pending-amount">' + optimisticBet.amount + ' BEAM</span>';
+        html += '<span class="pending-amount">' + formatBeam(uw.amount) + ' BEAM</span>';
         html += '</div>';
         html += '<div class="pending-bottom">';
-        html += '<span class="optimistic-status">Confirming on-chain...</span>';
-        html += '<div class="pending-progress"><div class="pending-fill optimistic-fill"></div></div>';
+        html += '<div class="preview-result win">';
+        html += '<span class="preview-number">#' + uw.result + '</span>';
+        html += '<span class="preview-outcome">WON</span>';
+        html += '</div>';
+        html += '<button class="reveal-btn claim-btn" onclick="doClaimAll()">CLAIM ' + formatBeam(uw.payout) + ' BEAM</button>';
         html += '</div></div>';
     }
 
-    for (var i = 0; i < pendingBets.length; i++) {
-        var bet = pendingBets[i];
+    for (var i = 0; i < activeBets.length; i++) {
+        var bet = activeBets[i];
         var canReveal = bet.can_reveal === 1;
         var typeClass = betTypeClass(bet.type);
         var progress = bet.blocks_remaining > 0 ? Math.max(0, Math.min(100, ((10 - bet.blocks_remaining) / 10) * 100)) : 100;
+        var hasPreview = canReveal && bet.preview_result !== undefined;
+        var previewWon = hasPreview && bet.preview_won === 1;
 
-        html += '<div class="pending-card' + (canReveal ? ' can-reveal' : '') + '">';
+        var cardClass = 'pending-card';
+        if (previewWon) {
+            cardClass += ' preview-won';
+        } else if (canReveal) {
+            cardClass += ' can-reveal';
+        }
+
+        html += '<div class="' + cardClass + '">';
         html += '<div class="pending-top">';
         html += '<span class="pending-type ' + typeClass + '">' + betTypeIcon(bet.type) + ' ' + betTypeName(bet.type);
         if (bet.type === 2) html += ' #' + bet.exact_number;
@@ -1761,8 +2130,14 @@ function renderPendingBets() {
         html += '</div>';
         html += '<div class="pending-bottom">';
 
-        if (canReveal) {
-            html += '<button class="reveal-btn" onclick="doRevealSingle(' + bet.bet_id + ')">REVEAL</button>';
+        if (previewWon) {
+            html += '<div class="preview-result win">';
+            html += '<span class="preview-number">#' + bet.preview_result + '</span>';
+            html += '<span class="preview-outcome">WON</span>';
+            html += '</div>';
+            html += '<button class="reveal-btn claim-btn" onclick="doClaimAll()">CLAIM ' + formatBeam(bet.preview_payout) + ' BEAM</button>';
+        } else if (canReveal) {
+            html += '<button class="reveal-btn" onclick="doClaimAll()">REVEAL</button>';
         } else {
             var blocksLeft = bet.blocks_remaining || 0;
             html += '<span class="pending-countdown">' + blocksLeft + ' blocks remaining</span>';
@@ -1774,14 +2149,18 @@ function renderPendingBets() {
 
     container.innerHTML = html;
 
-    // Show/hide section title and reveal-all button
-    var hasContent = pendingBets.length > 0 || optimisticBet;
-    title.style.display = hasContent ? 'block' : 'none';
+    // Show/hide section title — include unclaimed wins
+    var hasContent = activeBets.length > 0 || unclaimedWins.length > 0;
+    title.style.display = hasContent ? 'flex' : 'none';
 
-    // Add reveal-all button if multiple bets are revealable
-    var revealable = pendingBets.filter(function(b) { return b.can_reveal === 1; });
-    if (revealable.length > 1) {
-        container.innerHTML += '<button class="reveal-all-btn" onclick="doRevealAll()">REVEAL ALL (' + revealable.length + ' bets)</button>';
+    // CLAIM ALL button — when multiple claimable items exist (pending wins + unclaimed history wins)
+    var claimable = activeBets.filter(function(b) { return b.can_reveal === 1 && b.preview_won === 1; });
+    var totalClaimable = claimable.length + unclaimedWins.length;
+    if (totalClaimable > 1) {
+        var totalPayout = 0;
+        for (var j = 0; j < claimable.length; j++) totalPayout += claimable[j].preview_payout;
+        for (var k = 0; k < unclaimedWins.length; k++) totalPayout += unclaimedWins[k].payout;
+        container.innerHTML += '<button class="reveal-all-btn" onclick="doClaimAll()">CLAIM ALL ' + formatBeam(totalPayout) + ' BEAM (' + totalClaimable + ' wins)</button>';
     }
 }
 
@@ -1794,55 +2173,103 @@ function renderHistory() {
 }
 
 function renderHistoryStats() {
-    if (betHistory.length === 0) {
+    // Include all resolved bets: history (Lost/Claimed) + unclaimed wins + preview losses
+    var totalEntries = betHistory.length + unclaimedWins.length + previewLosses.length;
+    if (totalEntries === 0) {
         document.getElementById('historyStats').innerHTML = '';
         return;
     }
 
-    var wins = 0, losses = 0, totalWagered = 0, totalWon = 0;
+    var wins = 0, losses = 0, totalWagered = 0, totalWon = 0, totalLost = 0;
+    // Count on-chain resolved history (Lost + Claimed)
     for (var i = 0; i < betHistory.length; i++) {
         var h = betHistory[i];
         totalWagered += h.amount;
-        var won = h.status === 1 || h.status === 3;
-        if (won) { wins++; totalWon += h.payout; } else { losses++; }
+        if (h.status === 3) { wins++; totalWon += h.payout; } else { losses++; totalLost += h.amount; }
+    }
+    // Count unclaimed wins
+    for (var u = 0; u < unclaimedWins.length; u++) {
+        wins++;
+        totalWagered += unclaimedWins[u].amount;
+        totalWon += unclaimedWins[u].payout;
+    }
+    // Count preview losses (auto-resolved client-side)
+    for (var j = 0; j < previewLosses.length; j++) {
+        losses++;
+        totalWagered += previewLosses[j].amount;
+        totalLost += previewLosses[j].amount;
     }
 
-    var winRate = betHistory.length > 0 ? Math.round((wins / betHistory.length) * 100) : 0;
+    var winRate = totalEntries > 0 ? Math.round((wins / totalEntries) * 100) : 0;
+    var netProfit = totalWon - totalLost;
 
     var html = '';
-    html += '<div class="stat-item"><span class="stat-label">Bets</span><span class="stat-value">' + betHistory.length + '</span></div>';
+    html += '<div class="stat-item"><span class="stat-label">Bets</span><span class="stat-value">' + totalEntries + '</span></div>';
     html += '<div class="stat-item"><span class="stat-label">W/L</span><span class="stat-value win">' + wins + '</span><span class="stat-value">/</span><span class="stat-value loss">' + losses + '</span></div>';
     html += '<div class="stat-item"><span class="stat-label">Rate</span><span class="stat-value">' + winRate + '%</span></div>';
-    html += '<div class="stat-item"><span class="stat-label">Won</span><span class="stat-value win">+' + formatBeam(totalWon) + '</span></div>';
+    html += '<div class="stat-item"><span class="stat-label">Net</span><span class="stat-value ' + (netProfit >= 0 ? 'win' : 'loss') + '">' + (netProfit >= 0 ? '+' : '') + formatBeam(Math.abs(netProfit)) + '</span></div>';
 
     document.getElementById('historyStats').innerHTML = html;
 }
 
 function renderHistoryList() {
-    if (betHistory.length === 0) {
+    // History now only contains Lost/Claimed bets (shader separates unclaimed wins)
+    var totalEntries = betHistory.length + previewLosses.length;
+    if (totalEntries === 0) {
         document.getElementById('historyList').innerHTML = '<div class="empty-state"><span class="empty-icon">&#127922;</span>No bets yet \u2014 place your first!</div>';
         return;
     }
 
     var html = '';
+
+    // Column header row
+    html += '<div class="history-header">';
+    html += '<span style="width:72px;min-width:72px">Your Bet</span>';
+    html += '<span style="width:36px;min-width:36px;text-align:center">Roll</span>';
+    html += '<span style="flex:1;text-align:center">Result</span>';
+    html += '<span style="width:80px;min-width:80px;text-align:right">Wager</span>';
+    html += '<span style="width:90px;min-width:90px;text-align:right">Payout</span>';
+    html += '<span style="width:62px;min-width:62px;text-align:right">Block</span>';
+    html += '</div>';
+
+    // Preview losses at top (auto-resolved, not yet on-chain)
+    for (var j = 0; j < previewLosses.length; j++) {
+        var pl = previewLosses[j];
+        var typeClass = betTypeClass(pl.type);
+        html += '<div class="history-item lost">';
+        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(pl.type) + ' ' + betTypeName(pl.type);
+        if (pl.type === 2) html += ' #' + pl.exact_number;
+        html += '</span>';
+        html += '<span class="history-col-result">' + pl.preview_result + '</span>';
+        html += '<span class="history-col-outcome loss">Lost</span>';
+        html += '<span class="history-col-bet">' + formatBeam(pl.amount) + '</span>';
+        html += '<span class="history-col-payout loss">-' + formatBeam(pl.amount) + '</span>';
+        html += '<span class="history-col-height">' + (pl.created_height || '') + '</span>';
+        html += '</div>';
+    }
+
+    // On-chain resolved history (excluding unclaimed wins)
     for (var i = 0; i < betHistory.length; i++) {
         var h = betHistory[i];
-        var won = h.status === 1 || h.status === 3;
+        var won = h.status === 3; // Claimed = won
         var typeClass = betTypeClass(h.type);
 
         html += '<div class="history-item ' + (won ? 'won' : 'lost') + '">';
-        html += '<span class="history-type ' + typeClass + '">' + betTypeIcon(h.type) + ' ' + betTypeName(h.type);
-        if (h.type === 2) html += '#' + h.exact_number;
+        html += '<span class="history-col-type ' + typeClass + '">' + betTypeIcon(h.type) + ' ' + betTypeName(h.type);
+        if (h.type === 2) html += ' #' + h.exact_number;
         html += '</span>';
-        html += '<span class="history-result">' + h.result + '</span>';
-        html += '<span class="history-amount">' + formatBeam(h.amount) + '</span>';
-        html += '<span class="history-payout ' + (won ? 'win' : 'loss') + '">';
+        html += '<span class="history-col-result">' + h.result + '</span>';
+        html += '<span class="history-col-outcome ' + (won ? 'win' : 'loss') + '">' + (won ? 'Won' : 'Lost') + '</span>';
+        html += '<span class="history-col-bet">' + formatBeam(h.amount) + '</span>';
+        html += '<span class="history-col-payout ' + (won ? 'win' : 'loss') + '">';
         if (won) {
             html += '+' + formatBeam(h.payout);
         } else {
             html += '-' + formatBeam(h.amount);
         }
-        html += '</span></div>';
+        html += '</span>';
+        html += '<span class="history-col-height">' + (h.revealed_height || h.created_height || '') + '</span>';
+        html += '</div>';
     }
 
     document.getElementById('historyList').innerHTML = html;
@@ -1851,6 +2278,49 @@ function renderHistoryList() {
 // ================================================================
 // UI: RENDER POOL
 // ================================================================
+// ================================================================
+// RECENT GLOBAL RESULTS (casino-style strip)
+// ================================================================
+function loadGlobalResults() {
+    viewAllBets(function(result) {
+        if (!result || result.error) return;
+        var bets = result.bets || [];
+        // Filter resolved bets only (Won=1, Lost=2, Claimed=3) — must have a result number
+        var resolved = [];
+        for (var i = 0; i < bets.length; i++) {
+            if (bets[i].status > 0 && bets[i].result > 0) {
+                resolved.push(bets[i]);
+            }
+        }
+        // Sort by revealed_height descending (most recent first)
+        resolved.sort(function(a, b) {
+            return (b.revealed_height || b.created_height || 0) - (a.revealed_height || a.created_height || 0);
+        });
+        // Take latest 10
+        recentGlobalResults = resolved.slice(0, 10);
+        renderRecentResults();
+    });
+}
+
+function renderRecentResults() {
+    var container = document.getElementById('recentResults');
+    var row = document.getElementById('recentResultsRow');
+    if (recentGlobalResults.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'block';
+    var html = '';
+    for (var i = 0; i < recentGlobalResults.length; i++) {
+        var r = recentGlobalResults[i];
+        var num = r.result;
+        var cls = num === 50 ? 'exact-50' : (num > 50 ? 'up' : 'down');
+        var arrow = num === 50 ? '' : (num > 50 ? '<span class="result-arrow">&#9650;</span>' : '<span class="result-arrow">&#9660;</span>');
+        html += '<div class="result-bubble ' + cls + '">' + num + arrow + '</div>';
+    }
+    row.innerHTML = html;
+}
+
 function renderPool() {
     if (!pool) return;
     var avail = pool.available_balance;
@@ -1876,19 +2346,17 @@ function renderPool() {
 // ================================================================
 function showRevealModal(bet) {
     var won = bet.status === 1 || bet.status === 3;
-    var typeLabel = betTypeName(bet.type);
-    if (bet.type === 2) typeLabel += ' #' + bet.exact_number;
 
-    document.getElementById('revealLabel').textContent = typeLabel + ' BET \u2014 YOUR NUMBER';
-    document.getElementById('revealNumber').textContent = bet.result;
-    document.getElementById('revealNumber').className = 'reveal-number ' + (won ? 'win' : 'loss');
+    document.getElementById('revealLabel').textContent = '';
+    document.getElementById('revealNumber').textContent = '';
+    document.getElementById('revealNumber').className = 'reveal-number';
 
     if (won) {
-        document.getElementById('revealOutcome').textContent = 'YOU WIN!';
+        document.getElementById('revealOutcome').textContent = 'CONGRATULATIONS!';
         document.getElementById('revealOutcome').className = 'reveal-outcome win';
-        document.getElementById('revealPayout').textContent = '+' + formatBeam(bet.payout) + ' BEAM';
+        document.getElementById('revealPayout').textContent = 'You won ' + formatBeam(bet.payout) + ' BEAM';
         document.getElementById('revealPayout').style.display = 'block';
-        document.getElementById('revealDetail').textContent = 'Wagered ' + formatBeam(bet.amount) + ' BEAM';
+        document.getElementById('revealDetail').textContent = '';
         spawnParticles();
     } else {
         document.getElementById('revealOutcome').textContent = 'BETTER LUCK NEXT TIME';
