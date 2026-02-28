@@ -3,17 +3,16 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 
-# ── Build / package output ────────────────────────────────────────────────────
-ui/build/
+# ── Build staging (per-DApp) ─────────────────────────────────────────────────
 dist/
 package/
 
 # ── Runtime logs ──────────────────────────────────────────────────────────────
 logs/
-shaders/*/logs/
+dapps/*/shaders/logs/
 *.log
 
-# ── Wallet binary (platform-specific, never commit) ──────────────────────────
+# ── CLI wallet binaries (platform-specific, never commit) ────────────────────
 cli wallet/
 
 # ── Windows artifacts ─────────────────────────────────────────────────────────
