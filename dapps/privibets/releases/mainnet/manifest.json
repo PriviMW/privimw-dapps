@@ -1,0 +1,10 @@
+{
+  "name": "PriviBets",
+  "description": "Private, provably fair on-chain betting. Place bets on random outcomes — all results verifiable, all transactions confidential. By PriviMW.",
+  "url": "localapp/app/index.html",
+  "icon": "localapp/app/appicon.svg",
+  "version": "1.0.0",
+  "api_version": "7.3",
+  "min_api_version": "7.3",
+  "guid": "d353352eb6a94618ac0a8ec7bb001a2b"
+}

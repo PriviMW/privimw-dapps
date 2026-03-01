@@ -2008,7 +2008,7 @@ function doPlaceBet() {
 // ACTIONS: REVEAL BETS
 // ================================================================
 function doRevealSingle(betId) {
-    var beforeHistory = betHistory.slice();
+    var claimedResults = captureClaimableResults();
 
     checkResults(
         null,
@@ -2019,14 +2019,17 @@ function doRevealSingle(betId) {
             }
 
             showToast('Bet revealed!', 'success');
-            refreshAfterReveal(betId, beforeHistory);
+            if (claimedResults.length > 0) {
+                showRevealSummary(claimedResults);
+            }
+            scheduleRefresh();
         }
     );
 }
 
 // Claim winnings — uses checkResults (claim all) to piggyback lost bets cleanup
 function doClaimSingle(betId) {
-    var beforeHistory = betHistory.slice();
+    var claimedResults = captureClaimableResults();
 
     checkResults(
         null,
@@ -2037,13 +2040,16 @@ function doClaimSingle(betId) {
             }
 
             showToast('Winnings claimed!', 'success');
-            refreshAfterReveal(betId, beforeHistory);
+            if (claimedResults.length > 0) {
+                showRevealSummary(claimedResults);
+            }
+            scheduleRefresh();
         }
     );
 }
 
 function doRevealAll() {
-    var beforeHistory = betHistory.slice();
+    var claimedResults = captureClaimableResults();
 
     checkResults(
         null,
@@ -2054,14 +2060,18 @@ function doRevealAll() {
             }
 
             showToast('Bets revealed!', 'success');
-            refreshAfterReveal(null, beforeHistory);
+            if (claimedResults.length > 0) {
+                showRevealSummary(claimedResults);
+            }
+            scheduleRefresh();
         }
     );
 }
 
 // Claim all — processes all ready bets in one TX (claims wins, resolves losses)
 function doClaimAll() {
-    var beforeHistory = betHistory.slice();
+    // Capture all results being processed BEFORE the TX
+    var claimedResults = captureClaimableResults();
 
     checkResults(
         null,
@@ -2072,48 +2082,36 @@ function doClaimAll() {
             }
 
             showToast('Winnings claimed!', 'success');
-            refreshAfterReveal(null, beforeHistory);
+            if (claimedResults.length > 0) {
+                showRevealSummary(claimedResults);
+            }
+            scheduleRefresh();
         }
     );
 }
 
-function refreshAfterReveal(targetBetId, beforeHistory) {
-    // Schedule full data retries — TX takes ~60s to confirm on-chain
-    scheduleRefresh();
-
-    // Also poll specifically for history change to show the result modal
-    // as soon as the claimed bet appears in history
-    pollForRevealResult(beforeHistory, 12); // up to 12 attempts × 8s = ~96s
-}
-
-function pollForRevealResult(beforeHistory, attemptsLeft) {
-    if (attemptsLeft <= 0) return;
-    setTimeout(function() {
-        getResultHistory(function(r) {
-            if (!r || r.error) { pollForRevealResult(beforeHistory, attemptsLeft - 1); return; }
-            var newHistory = r.history || [];
-
-            // Find newly appeared results (not in beforeHistory)
-            var newResults = [];
-            for (var i = 0; i < newHistory.length; i++) {
-                var found = false;
-                for (var j = 0; j < beforeHistory.length; j++) {
-                    if (beforeHistory[j].bet_id === newHistory[i].bet_id) { found = true; break; }
-                }
-                if (!found) newResults.push(newHistory[i]);
-            }
-
-            if (newResults.length > 0) {
-                // On-chain confirmation arrived — update history and show modal
-                betHistory = newHistory;
-                renderHistory();
-                showRevealSummary(newResults);
-            } else {
-                // Not confirmed yet — keep polling
-                pollForRevealResult(beforeHistory, attemptsLeft - 1);
-            }
-        });
-    }, 8000); // check every 8s
+// Capture all wins/losses that will be processed by checkResults
+function captureClaimableResults() {
+    var results = [];
+    // Unclaimed wins (already resolved, waiting for claim)
+    for (var i = 0; i < unclaimedWins.length; i++) {
+        results.push(unclaimedWins[i]);
+    }
+    // Pending bets with preview results (will be resolved + claimed in same TX)
+    for (var i = 0; i < pendingBets.length; i++) {
+        var b = pendingBets[i];
+        if (b.preview_result !== undefined) {
+            results.push({
+                status: b.preview_won ? 1 : 2,
+                payout: b.preview_won ? b.preview_payout : 0,
+                amount: b.amount,
+                bet_type: b.bet_type,
+                result: b.preview_result,
+                bet_id: b.bet_id
+            });
+        }
+    }
+    return results;
 }
 
 // ================================================================
@@ -2257,7 +2255,7 @@ function renderHistoryStats() {
     }
 
     var winRate = totalEntries > 0 ? Math.round((wins / totalEntries) * 100) : 0;
-    var netProfit = totalWon - totalLost;
+    var netProfit = totalWon - totalWagered;
 
     var html = '';
     html += '<div class="stat-item"><span class="stat-label">Bets</span><span class="stat-value">' + totalEntries + '</span></div>';
