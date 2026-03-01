@@ -1317,7 +1317,7 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 // ================================================================
 // CONFIGURATION
 // ================================================================
-var CONTRACT_ID = '9703c25ada14139bd682d68ebacf4f9232465bedc5ac22c71a485f29bbf6d43d';
+var CONTRACT_ID = 'f412d7eaa345a7f67813ec0b0b8e0f9d94a572347077f93cc159353c8db6b118';
 var GROTH_PER_BEAM = 100000000;
 
 // ================================================================
@@ -1464,9 +1464,9 @@ function handleApiResult(json) {
 // ================================================================
 // SHADER CALLS
 // ================================================================
-function invokeShader(args, callback, withBytes) {
+function invokeShader(args, callback) {
     var apiParams = { args: args, create_tx: false };
-    if (withBytes && shaderBytes) {
+    if (shaderBytes) {
         apiParams.contract = shaderBytes;
     }
     callApi('invoke_contract', apiParams, callback);
@@ -1499,22 +1499,22 @@ function callShaderTx(role, action, extra, onReadyForConfirm, callback) {
         } else {
             callback(result);
         }
-    }, false);
+    });
 }
 
 function callShaderView(role, action, extra, callback) {
-    invokeShader(buildArgs(role, action, extra), callback, false);
+    invokeShader(buildArgs(role, action, extra), callback);
 }
 
 // ================================================================
 // DAPP API WRAPPERS
 // ================================================================
 function viewParams(callback) {
-    invokeShader(buildArgs('user', 'view_params', {}), callback, true);
+    invokeShader(buildArgs('user', 'view_params', {}), callback);
 }
 
 function viewAll(callback) {
-    invokeShader(buildArgs('user', 'view_all', {}), callback, true);
+    invokeShader(buildArgs('user', 'view_all', {}), callback);
 }
 
 function viewPool(callback) {
@@ -1532,7 +1532,7 @@ function getResultHistory(callback) {
 function placeBet(amount, betType, exactNum, onReady, callback) {
     callShaderTx('user', 'place_bet', {
         amount: amount,
-        asset_id: 0,
+        asset_id: (params && params.asset_id) || 0,
         bet_type: betType,
         exact_number: exactNum || 0
     }, onReady, callback);
@@ -1684,27 +1684,19 @@ function onWalletConnected() {
     document.getElementById('statusDot').className = 'status-dot connected';
     document.getElementById('statusDot').title = 'Connected';
 
-    // Fast path: try WITHOUT bytes (instant if shader cached from previous session)
-    invokeShader(buildArgs('user', 'view_all', {}), function(result) {
-        if (result && !result.error && result.params) {
-            // Shader was cached — instant load
+    // Load shader bytes first, then make initial data call.
+    // Bytes are cached globally — all subsequent invoke_contract calls reuse them.
+    setConnectText('Loading contract...');
+    loadShaderBytes(function(err) {
+        if (err) { setConnectText('Error: ' + err); return; }
+        viewAll(function(result) {
+            if (result && result.error) {
+                setConnectText('Shader error: ' + extractError(result));
+                return;
+            }
             applyViewAll(result);
-            return;
-        }
-
-        // Shader not cached — load bytes, then compile
-        setConnectText('Loading contract...');
-        loadShaderBytes(function(err) {
-            if (err) { setConnectText('Error: ' + err); return; }
-            viewAll(function(result2) {
-                if (result2 && result2.error) {
-                    setConnectText('Shader error: ' + extractError(result2));
-                    return;
-                }
-                applyViewAll(result2);
-            });
         });
-    }, false);
+    });
 }
 
 // ================================================================
@@ -1788,10 +1780,10 @@ function refreshAllData() {
 }
 
 function scheduleRefresh() {
-    // After a TX, data won't change until it confirms on-chain (~60s on DAPPNET, 1 block).
-    // Refresh immediately, then retry at intervals that cover the full confirmation window.
+    // After a TX, refresh at intervals covering the full confirmation window (~60s on DAppNet).
+    // Safe from concurrency: refreshInFlight prevents overlap, and user isn't clicking during wait.
     refreshAllData();
-    [5000, 15000, 30000, 45000, 60000, 90000].forEach(function(delay) {
+    [10000, 30000, 60000].forEach(function(delay) {
         setTimeout(function() { lastRefreshTime = 0; refreshAllData(); }, delay);
     });
 }
@@ -1808,10 +1800,11 @@ function doManualRefresh(btn) {
 
 function startPolling() {
     if (pollInterval) clearInterval(pollInterval);
-    // Polling as fallback — events are primary, this catches anything missed
+    // Events (ev_system_state) are the primary refresh trigger — fires on every new block.
+    // This timer is a rare fallback only, kept long to avoid overlapping with user actions.
     pollInterval = setInterval(function() {
         refreshAllData();
-    }, 10000); // 10s fallback (events handle the fast path)
+    }, 60000); // 60s fallback
 }
 
 // ================================================================
@@ -1979,13 +1972,13 @@ function doPlaceBet() {
         var maxPayout = (amountGroth * mult) / 100;
         var avail = pool.available_balance;
         if (avail === undefined) {
+            // Mirror contract's GetAvailableBalance: total_in - reserved
             var td = pool.total_deposited || 0;
             var tb = pool.total_bets || 0;
             var tp = pool.total_payouts || 0;
-            var pb = pool.pending_bets || 0;
             var pmp = pool.pending_max_payout || 0;
             var pp = pool.pending_payouts || 0;
-            avail = td + tb - tp - pb - pmp - pp;
+            avail = td + tb - tp - pmp - pp;
         }
         if (maxPayout > avail) {
             showToast('Pool cannot cover payout. Max bet: ' + grothToBeam(Math.floor(avail * 100 / mult)) + ' BEAM', 'error');
@@ -2382,14 +2375,13 @@ function renderPool() {
     if (!pool) return;
     var avail = pool.available_balance;
     if (avail === undefined) {
-        // Calculate from components
+        // Mirror contract's GetAvailableBalance: total_in - reserved
         var td = pool.total_deposited || 0;
         var tb = pool.total_bets || 0;
         var tp = pool.total_payouts || 0;
-        var pb = pool.pending_bets || 0;
         var pmp = pool.pending_max_payout || 0;
         var pp = pool.pending_payouts || 0;
-        avail = td + tb - tp - pb - pmp - pp;
+        avail = td + tb - tp - pmp - pp;
         if (avail < 0) avail = 0;
     }
     document.getElementById('poolAmount').textContent = formatBeam(avail);

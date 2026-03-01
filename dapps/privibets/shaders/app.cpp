@@ -478,9 +478,12 @@ void On_result_history(const ContractID& cid)
 
     if (s.m_NextBetId > 0)
     {
+        // Optimization: only scan last 500 bets for history (circular buffer keeps 50)
+        uint64_t startId = (s.m_NextBetId > 500) ? (s.m_NextBetId - 500) : 0;
+
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_BetId = 0;
+        k0.m_KeyInContract.m_BetId = startId;
         k1.m_Prefix.m_Cid = cid;
         k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
@@ -603,9 +606,14 @@ void On_view_all(const ContractID& cid)
         Env::DocArray gr("bets");
         if (s.m_NextBetId > 0)
         {
+            // Start from whichever is earlier: FirstUnresolved (for pending/unclaimed)
+            // or last 500 bets (for history circular buffer)
+            uint64_t histStart = (s.m_NextBetId > 500) ? (s.m_NextBetId - 500) : 0;
+            uint64_t startId = (s.m_FirstUnresolvedBetId < histStart) ? s.m_FirstUnresolvedBetId : histStart;
+
             Env::Key_T<BeamBet::BetKey> k0, k1;
             k0.m_Prefix.m_Cid = cid;
-            k0.m_KeyInContract.m_BetId = 0;
+            k0.m_KeyInContract.m_BetId = startId;
             k1.m_Prefix.m_Cid = cid;
             k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 

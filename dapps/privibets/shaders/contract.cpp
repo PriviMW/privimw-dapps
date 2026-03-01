@@ -515,7 +515,7 @@ BEAM_EXPORT void Method_10(const BeamBet::Method::ResolveExpiredBets& r)
         BeamBet::Bet b;
         if (!Env::LoadVar_T(bk, b)) continue;
         if (b.m_Status != BeamBet::BetStatus::Pending) continue;
-        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
+        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) break; // Bets are sequential — if this one isn't expired, later ones can't be either
 
         Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
         uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
