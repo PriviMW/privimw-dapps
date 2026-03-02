@@ -1178,7 +1178,6 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
     font-size: 12px;
     color: var(--text-muted);
 }
-.game-card-pool { font-weight: 600; color: var(--accent-teal); }
 .game-card-arrow { font-size: 18px; color: var(--text-muted); transition: var(--transition); }
 .game-card:hover .game-card-arrow { color: var(--accent-teal); transform: translateX(3px); }
 .game-card.disabled { opacity: 0.5; pointer-events: none; cursor: default; }
@@ -1613,7 +1612,6 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
             </div>
             <div class="game-card-desc">Roll the d100. Bet Up, Down, or pick an Exact number. Simple odds, fast results.</div>
             <div class="game-card-footer">
-                <span>Pool: <span class="game-card-pool" id="dicePoolLabel">...</span> BEAM</span>
                 <span class="game-card-arrow">&#8594;</span>
             </div>
         </div>
@@ -1624,7 +1622,6 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
             </div>
             <div class="game-card-desc">Place your chips on the board. 13 bet types, shared spin. Up to 10 positions per spin.</div>
             <div class="game-card-footer">
-                <span>Pool: <span class="game-card-pool" id="roulettePoolLabel">...</span> BEAM</span>
                 <span class="game-card-arrow">&#8594;</span>
             </div>
         </div>
@@ -1922,8 +1919,8 @@ button { border: none; cursor: pointer; background: none; color: inherit; }
 // ================================================================
 // CONFIGURATION
 // ================================================================
-var DICE_CID = 'f412d7eaa345a7f67813ec0b0b8e0f9d94a572347077f93cc159353c8db6b118';
-var ROULETTE_CID = 'd39262e4d77701b64db8a6678fe88b9f9e089182981a18890769c8bfbe2f3f12';
+var DICE_CID = '7cb403d6baed3a746979a757f679c6a81ac419e96d45d04328f427aa3c5e95cd';
+var ROULETTE_CID = '207a2e548bf303fdf50339783a13ebbf3f9d95dd68a754b6574babbb473d27ea';
 var CONTRACT_ID = DICE_CID; // Legacy alias — used by existing dice code
 var GROTH_PER_BEAM = 100000000;
 
@@ -2334,12 +2331,6 @@ function applyViewAll(result) {
 
     subscribeToEvents();
     startPolling();
-
-    // Update landing page dice pool label
-    if (pool) {
-        var el = document.getElementById('dicePoolLabel');
-        if (el) el.textContent = formatBeam(pool.available_balance || 0);
-    }
 }
 
 function onWalletConnected() {
@@ -2411,14 +2402,15 @@ function refreshAllData() {
     if (!isConnected) return;
     var now = Date.now();
     if (now - lastRefreshTime < REFRESH_COOLDOWN) return; // Throttle
-    if (refreshInFlight) return;
-    refreshInFlight = true;
     lastRefreshTime = now;
 
     if (currentPage === 'roulette') {
         rouletteRefreshAllData();
         return;
     }
+
+    if (refreshInFlight) return;
+    refreshInFlight = true;
 
     viewAll(function(r) {
         refreshInFlight = false;
@@ -2455,11 +2447,6 @@ function refreshAllData() {
             loadGlobalResults();
         }
 
-        // Update landing page pool label
-        if (pool) {
-            var el = document.getElementById('dicePoolLabel');
-            if (el) el.textContent = formatBeam(pool.available_balance || 0);
-        }
     });
 }
 
@@ -3731,6 +3718,8 @@ function doRouletteSpin() {
             updateBetSummary();
             showToast('Spin failed: ' + extractError(result), 'error');
         } else {
+            btn.disabled = false;
+            updateBetSummary();
             showToast('Spin placed!', 'success');
             clearBoard();
             rouletteScheduleRefresh();
@@ -3738,8 +3727,7 @@ function doRouletteSpin() {
     });
 }
 
-function doRouletteClaimAll() {
-    var btn = event && event.target;
+function doRouletteClaimAll(btn) {
     if (btn) { btn.disabled = true; btn.textContent = 'CLAIMING...'; }
 
     // Capture claimable results BEFORE the TX
@@ -3794,8 +3782,6 @@ function rouletteApplyViewAll(r) {
     }
     if (r.pool) {
         roulettePool = r.pool;
-        var el = document.getElementById('roulettePoolLabel');
-        if (el) el.textContent = formatBeam(roulettePool.available_balance || 0);
         if (currentPage === 'roulette') {
             document.getElementById('poolAmount').textContent = formatBeam(roulettePool.available_balance || 0);
         }
@@ -3815,6 +3801,8 @@ function rouletteApplyViewAll(r) {
 
 function rouletteRefreshAllData() {
     if (!rouletteShaderBytes) { refreshInFlight = false; return; }
+    if (refreshInFlight) return;
+    refreshInFlight = true;
     rouletteCallView('user', 'view_all', {}, function(r) {
         refreshInFlight = false;
         if (!r || r.error) return;
@@ -3932,7 +3920,7 @@ function renderRouletteSpins() {
         var label = totalPayout > 0
             ? 'CLAIM ALL ' + formatBeam(totalPayout) + ' BEAM'
             : 'RESOLVE ALL';
-        html += '<button class="reveal-all-btn" style="margin-top:8px;font-size:15px;padding:14px;border-width:2px;" onclick="doRouletteClaimAll()">' + label + '</button>';
+        html += '<button class="reveal-all-btn" style="margin-top:8px;font-size:15px;padding:14px;border-width:2px;" onclick="doRouletteClaimAll(this)">' + label + '</button>';
     }
 
     container.innerHTML = html;

@@ -465,6 +465,9 @@ BEAM_EXPORT void Method_7(const BeamRoulette::Method::SetConfig& r)
     }
     s.m_Paused = r.m_Paused;
 
+    // Min must not exceed max
+    if (s.m_MinBet > s.m_MaxBet) Env::Halt();
+
     // Overflow protection: maxBet * highest multiplier must not overflow uint64_t
     if (s.m_MaxBet > 0) {
         if (s.m_StraightMult > 0 && s.m_MaxBet > static_cast<uint64_t>(-1) / s.m_StraightMult)
@@ -530,8 +533,7 @@ BEAM_EXPORT void Method_9(const BeamRoulette::Method::CheckSingleSpin& r)
     // Only the spin owner can claim
     if (_POD_(spin.m_UserPk) != r.m_UserPk) Env::Halt();
 
-    AssetID assetId = spin.m_Bets[0].m_Amount > 0 ? s.m_AssetId : 0; // Use contract's asset
-    assetId = s.m_AssetId;
+    AssetID assetId = s.m_AssetId;
 
     if (spin.m_Status == BeamRoulette::SpinStatus::Pending) {
         if (hCurrent < spin.m_RevealAt) Env::Halt();

@@ -384,6 +384,9 @@ BEAM_EXPORT void Method_7(const BeamBet::Method::SetConfig& r)
     }
     s.m_Paused = r.m_Paused;
 
+    // Min must not exceed max
+    if (s.m_MinBet > s.m_MaxBet) Env::Halt();
+
     // Overflow protection: maxBet * multiplier must not overflow uint64_t
     // Check BOTH multipliers independently (don't assume one is always larger)
     if (s.m_MaxBet > 0) {
