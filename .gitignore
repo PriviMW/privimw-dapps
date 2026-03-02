@@ -20,6 +20,8 @@ NUL
 Thumbs.db
 Desktop.ini
 
+# ── Local IDE/tool settings ─────────────────────────────────────────
+
 # ── Environment / secrets ─────────────────────────────────────────────────────
 .env
 .env.local

@@ -2849,7 +2849,9 @@ function renderPendingBets() {
             html += '<span class="preview-outcome">WON</span>';
             html += '</div>';
             html += '<span class="win-payout">+' + formatBeam(uw.payout) + ' BEAM</span>';
-            html += '</div></div>';
+            html += '</div>';
+            html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-family:\'JetBrains Mono\',monospace;">Bet #' + (uw.bet_id || '?') + ' &middot; Block #' + (uw.revealed_height || uw.created_height || '?') + '</div>';
+            html += '</div>';
         } else {
             var bet = item.data;
             var canReveal = bet.can_reveal === 1;
@@ -2888,7 +2890,14 @@ function renderPendingBets() {
                 html += '<div class="pending-progress"><div class="pending-fill" style="width:' + progress + '%"></div></div>';
             }
 
-            html += '</div></div>';
+            html += '</div>';
+            var revealHeight = bet.created_height ? (bet.created_height + (params && params.reveal_epoch ? parseInt(params.reveal_epoch) : 3)) : null;
+            if (canReveal || previewWon) {
+                html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-family:\'JetBrains Mono\',monospace;">Bet #' + (bet.bet_id || '?') + ' &middot; Block #' + (revealHeight || '?') + '</div>';
+            } else {
+                html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;font-family:\'JetBrains Mono\',monospace;">Bet #' + (bet.bet_id || '?') + ' &middot; Reveals at block #' + (revealHeight || '?') + '</div>';
+            }
+            html += '</div>';
         }
     }
 
@@ -2975,7 +2984,7 @@ function renderHistoryList() {
     html += '<span style="width:38px;min-width:38px;text-align:center"></span>';
     html += '<span style="width:66px;min-width:66px;text-align:right">Wager</span>';
     html += '<span style="width:74px;min-width:74px;text-align:right">Payout</span>';
-    html += '<span style="width:50px;min-width:50px;text-align:right">Block</span>';
+    html += '<span style="width:50px;min-width:50px;text-align:right">Bet ID</span>';
     html += '</div>';
 
     // Preview losses at top (auto-resolved, not yet on-chain)
@@ -2990,7 +2999,7 @@ function renderHistoryList() {
         html += '<span class="history-col-outcome loss">Lost</span>';
         html += '<span class="history-col-bet">' + formatBeam(pl.amount) + '</span>';
         html += '<span class="history-col-payout loss">-' + formatBeam(pl.amount) + '</span>';
-        html += '<span class="history-col-height">' + (pl.created_height || '') + '</span>';
+        html += '<span class="history-col-height">' + (pl.bet_id || '') + '</span>';
         html += '</div>';
     }
 
@@ -3014,7 +3023,7 @@ function renderHistoryList() {
             html += '-' + formatBeam(h.amount);
         }
         html += '</span>';
-        html += '<span class="history-col-height">' + (h.revealed_height || h.created_height || '') + '</span>';
+        html += '<span class="history-col-height">' + (h.bet_id || '') + '</span>';
         html += '</div>';
     }
 
