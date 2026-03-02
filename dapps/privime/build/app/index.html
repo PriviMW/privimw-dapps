@@ -1,0 +1,2141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PriviMe</title>
+    <link rel="icon" href="data:,">
+    <style>
+/* ==================== VARIABLES ==================== */
+:root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-card: #151d2e;
+    --bg-tertiary: #1f2937;
+    --bg-hover: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-color: #2d3748;
+    --accent-teal: #25c2a0;
+    --accent-blue: #448aff;
+    --accent-red: #ef4444;
+    --accent-gold: #eab308;
+    --bubble-sent: #1a4a3a;
+    --bubble-sent-border: #25c2a0;
+    --bubble-recv: #1e293b;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+    --shadow-card: 0 4px 20px rgba(0,0,0,0.4);
+    --transition: 150ms ease;
+}
+
+/* ==================== RESET ==================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.5;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+input, button, textarea { font-family: inherit; }
+button { border: none; cursor: pointer; background: none; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* ==================== LAYOUT ==================== */
+.app-container {
+    max-width: 440px;
+    margin: 0 auto;
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ==================== HEADER ==================== */
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    gap: 8px;
+}
+.header-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.header-logo svg { width: 28px; height: 28px; flex-shrink: 0; }
+.header-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-teal);
+}
+.header-handle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+}
+.header-right { display: flex; gap: 8px; align-items: center; }
+.icon-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background var(--transition);
+    flex-shrink: 0;
+}
+.icon-btn:hover { background: var(--bg-hover); }
+.icon-btn svg { width: 18px; height: 18px; color: var(--text-secondary); }
+.back-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: background var(--transition);
+}
+.back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.back-btn svg { width: 16px; height: 16px; }
+.status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+.status-dot.connected { background: var(--accent-teal); }
+
+/* ==================== PAGE CONTAINER ==================== */
+.page { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+.page.active { display: flex; }
+.page-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.page-scroll::-webkit-scrollbar { width: 4px; }
+.page-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+/* ==================== SPLASH ==================== */
+#splashPage.active {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    padding: 32px;
+}
+.splash-logo {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    text-align: center;
+}
+.splash-logo svg { width: 72px; height: 72px; }
+.splash-title { font-size: 28px; font-weight: 800; color: var(--accent-teal); }
+.splash-subtitle { font-size: 14px; color: var(--text-muted); }
+.splash-status { font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+
+/* ==================== HOME — NO HANDLE ==================== */
+.hero-section {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+    gap: 16px;
+    flex: 1;
+}
+.hero-icon { width: 80px; height: 80px; margin-bottom: 8px; }
+.hero-title { font-size: 22px; font-weight: 700; }
+.hero-sub { font-size: 14px; color: var(--text-secondary); max-width: 280px; }
+.hero-fee {
+    font-size: 12px; color: var(--text-muted);
+    padding: 6px 14px;
+    background: var(--bg-tertiary);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+}
+
+/* ==================== HOME — CONTACT LIST ==================== */
+.search-bar-wrap { padding: 12px 16px; flex-shrink: 0; }
+.search-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 8px 12px;
+    transition: border-color var(--transition);
+}
+.search-bar:focus-within { border-color: var(--accent-teal); }
+.search-bar svg { width: 16px; height: 16px; color: var(--text-muted); flex-shrink: 0; }
+.search-bar input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text-primary); font-size: 14px;
+}
+.search-bar input::placeholder { color: var(--text-muted); }
+
+.contact-list { flex: 1; overflow-y: auto; }
+.contact-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background var(--transition);
+    border-bottom: 1px solid var(--border-color);
+}
+.contact-item:hover { background: var(--bg-hover); }
+.contact-avatar {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 600;
+    flex-shrink: 0;
+    position: relative;
+}
+.contact-avatar .unread-badge {
+    position: absolute; top: -2px; right: -2px;
+    width: 18px; height: 18px;
+    background: var(--accent-teal);
+    border-radius: 50%;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--bg-primary);
+    color: var(--bg-primary);
+}
+.contact-info { flex: 1; min-width: 0; }
+.contact-name { font-size: 15px; font-weight: 600; truncate; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contact-preview { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.contact-meta { text-align: right; flex-shrink: 0; }
+.contact-time { font-size: 11px; color: var(--text-muted); }
+
+.contacts-empty {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.new-chat-btn {
+    position: absolute;
+    bottom: 20px; right: 20px;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: var(--accent-teal);
+    color: var(--bg-primary);
+    font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 16px rgba(37,194,160,0.4);
+    cursor: pointer;
+    transition: transform var(--transition), box-shadow var(--transition);
+    z-index: 10;
+}
+.new-chat-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(37,194,160,0.5); }
+
+/* ==================== SEARCH RESULTS ==================== */
+.search-result-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: background var(--transition);
+}
+.search-result-item:hover { background: var(--bg-hover); }
+.search-result-name { font-size: 14px; font-weight: 600; }
+.search-result-sub { font-size: 12px; color: var(--text-muted); }
+
+/* ==================== REGISTER PAGE ==================== */
+.form-section { display: flex; flex-direction: column; gap: 20px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.form-input-wrap {
+    display: flex; align-items: center;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition);
+    overflow: hidden;
+}
+.form-input-wrap:focus-within { border-color: var(--accent-teal); }
+.form-input-wrap.valid { border-color: #10b981; }
+.form-input-wrap.invalid { border-color: var(--accent-red); }
+.input-prefix {
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 15px;
+    font-weight: 600;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border-color);
+}
+.form-input {
+    flex: 1; padding: 10px 12px;
+    background: none; border: none; outline: none;
+    color: var(--text-primary); font-size: 15px;
+}
+.form-input-full {
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 14px;
+    width: 100%;
+    outline: none;
+    transition: border-color var(--transition);
+}
+.form-input-full:focus { border-color: var(--accent-teal); }
+.form-input-full.monospace { font-family: 'Courier New', monospace; font-size: 12px; }
+.form-hint { font-size: 12px; color: var(--text-muted); }
+.form-hint.checking { color: var(--accent-gold); }
+.form-hint.available { color: #10b981; }
+.form-hint.taken { color: var(--accent-red); }
+
+.walletid-auto-wrap {
+    display: flex; gap: 8px; align-items: stretch;
+}
+.walletid-auto-wrap .form-input-full { flex: 1; }
+.auto-btn {
+    padding: 0 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition), color var(--transition);
+    flex-shrink: 0;
+}
+.auto-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ==================== BUTTONS ==================== */
+.btn {
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity var(--transition), transform var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-teal), #1a9e84);
+    color: var(--bg-primary);
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
+.btn-danger {
+    background: rgba(239,68,68,0.15);
+    color: var(--accent-red);
+    border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-full { width: 100%; }
+
+/* ==================== CHAT PAGE ==================== */
+.chat-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.chat-header-info { flex: 1; min-width: 0; }
+.chat-header-handle { font-size: 15px; font-weight: 700; }
+.chat-header-name { font-size: 12px; color: var(--text-muted); }
+
+.chat-messages {
+    flex: 1; overflow-y: auto;
+    padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.chat-messages::-webkit-scrollbar { width: 4px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+.msg-bubble {
+    max-width: 78%;
+    padding: 8px 12px;
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+.msg-bubble.sent {
+    align-self: flex-end;
+    background: var(--bubble-sent);
+    border: 1px solid var(--bubble-sent-border);
+    border-bottom-right-radius: var(--radius-sm);
+}
+.msg-bubble.received {
+    align-self: flex-start;
+    background: var(--bubble-recv);
+    border: 1px solid var(--border-color);
+    border-bottom-left-radius: var(--radius-sm);
+}
+.msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-align: right; }
+.msg-bubble.received .msg-time { text-align: left; }
+
+.chat-empty {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+    color: var(--text-muted); font-size: 13px;
+}
+
+.chat-input-area {
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+.chat-ttl-warning {
+    font-size: 11px; color: var(--text-muted);
+    text-align: center; padding: 4px 0 8px;
+}
+.chat-input-row {
+    display: flex; gap: 8px; align-items: flex-end;
+}
+.chat-input {
+    flex: 1; resize: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    max-height: 120px;
+    overflow-y: auto;
+    transition: border-color var(--transition);
+    line-height: 1.4;
+}
+.chat-input:focus { border-color: var(--accent-teal); }
+.chat-input::placeholder { color: var(--text-muted); }
+.send-btn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--accent-teal);
+    color: var(--bg-primary);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    border: none;
+    transition: opacity var(--transition), transform var(--transition);
+}
+.send-btn:hover:not(:disabled) { opacity: 0.85; }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.send-btn svg { width: 18px; height: 18px; }
+.char-count {
+    font-size: 11px; color: var(--text-muted);
+    text-align: right; padding: 2px 4px 0;
+}
+.char-count.near-limit { color: var(--accent-gold); }
+.char-count.at-limit { color: var(--accent-red); }
+
+/* ==================== PROFILE PAGE ==================== */
+.profile-hero {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 24px 24px;
+    gap: 8px;
+    text-align: center;
+}
+.profile-avatar-lg {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-teal), var(--accent-blue));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; font-weight: 700;
+    margin-bottom: 4px;
+}
+.profile-handle { font-size: 22px; font-weight: 700; }
+.profile-name { font-size: 14px; color: var(--text-secondary); }
+.profile-height { font-size: 12px; color: var(--text-muted); }
+
+.detail-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    gap: 12px;
+}
+.detail-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.detail-value { font-size: 13px; color: var(--text-secondary); word-break: break-all; flex: 1; text-align: right; font-family: 'Courier New', monospace; }
+.copy-btn {
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.copy-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ==================== MY PROFILE SECTION ==================== */
+.section-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding: 0 0 8px;
+}
+.info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.info-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    gap: 12px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-key { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+.info-val { font-size: 13px; color: var(--text-secondary); font-family: 'Courier New', monospace; word-break: break-all; text-align: right; }
+
+/* ==================== TOASTS ==================== */
+#toastContainer {
+    position: fixed;
+    bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 999; pointer-events: none;
+    width: 340px; max-width: calc(100vw - 32px);
+}
+.toast {
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 500;
+    text-align: center;
+    animation: slideUp 0.2s ease;
+}
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+.toast.success { background: #064e3b; border: 1px solid #10b981; color: #a7f3d0; }
+.toast.error   { background: #450a0a; border: 1px solid var(--accent-red); color: #fca5a5; }
+.toast.info    { background: #1e3a5f; border: 1px solid var(--accent-blue); color: #93c5fd; }
+.toast.warning { background: #451a03; border: 1px solid var(--accent-gold); color: #fde68a; }
+
+/* ==================== MODAL ==================== */
+.modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100; align-items: center; justify-content: center;
+    padding: 16px;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xl);
+    padding: 24px;
+    width: 100%; max-width: 360px;
+    display: flex; flex-direction: column; gap: 16px;
+}
+.modal-title { font-size: 17px; font-weight: 700; }
+.modal-body { font-size: 14px; color: var(--text-secondary); }
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions .btn { flex: 1; }
+
+/* ==================== CONTEXT MENU ==================== */
+.context-menu {
+    position: fixed;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    z-index: 200;
+    display: none;
+}
+.context-menu.active { display: block; }
+.context-menu-item {
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    transition: background var(--transition);
+    color: var(--text-primary);
+}
+.context-menu-item:hover { background: var(--bg-hover); }
+.context-menu-item.danger { color: var(--accent-red); }
+.context-menu-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ==================== DIVIDER ==================== */
+.divider { height: 1px; background: var(--border-color); margin: 4px 0; }
+
+/* ==================== BADGE ==================== */
+.badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+}
+.badge-teal { background: rgba(37,194,160,0.15); color: var(--accent-teal); border: 1px solid rgba(37,194,160,0.3); }
+.badge-muted { background: var(--bg-tertiary); color: var(--text-muted); border: 1px solid var(--border-color); }
+
+/* ==================== MISC ==================== */
+.flex-row { display: flex; align-items: center; gap: 8px; }
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.danger-zone { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color); }
+.text-sm { font-size: 13px; }
+.text-muted { color: var(--text-muted); }
+.text-danger { color: var(--accent-red); }
+.w100 { width: 100%; }
+    </style>
+</head>
+<body>
+
+<!-- ==================== STRUCTURE ==================== -->
+<div class="app-container">
+
+    <!-- SPLASH PAGE -->
+    <div id="splashPage" class="page active">
+        <div class="splash-logo">
+            <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="6" width="60" height="60" rx="16" fill="#151d2e" stroke="#25c2a0" stroke-width="1.5"/>
+                <rect x="16" y="22" width="40" height="7" rx="3.5" fill="#25c2a0" opacity="0.8"/>
+                <rect x="16" y="33" width="28" height="7" rx="3.5" fill="#448aff" opacity="0.7"/>
+                <rect x="16" y="44" width="34" height="7" rx="3.5" fill="#25c2a0" opacity="0.5"/>
+            </svg>
+            <div class="splash-title">PriviMe</div>
+            <div class="splash-subtitle">Private messaging on Beam</div>
+        </div>
+        <div id="splashStatus" class="splash-status">Connecting to wallet...</div>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="homePage" class="page">
+        <!-- Home Header -->
+        <div class="app-header">
+            <div class="header-logo">
+                <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="7" fill="#151d2e" stroke="#25c2a0" stroke-width="1.2"/><rect x="6" y="8" width="16" height="3" rx="1.5" fill="#25c2a0" opacity="0.8"/><rect x="6" y="13" width="11" height="3" rx="1.5" fill="#448aff" opacity="0.7"/><rect x="6" y="18" width="13" height="3" rx="1.5" fill="#25c2a0" opacity="0.5"/></svg>
+                <div>
+                    <div class="header-title">PriviMe</div>
+                    <div id="homeHandleLabel" class="header-handle"></div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="statusDot" class="status-dot"></div>
+                <div class="icon-btn" onclick="showMyProfile()" title="My profile">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hero (no handle) -->
+        <div id="homeHero" class="hero-section" style="display:none;">
+            <svg class="hero-icon" viewBox="0 0 80 80" fill="none">
+                <circle cx="40" cy="40" r="38" fill="#151d2e" stroke="#25c2a0" stroke-width="1.5"/>
+                <path d="M20 28h40a3 3 0 013 3v20a3 3 0 01-3 3H25l-8 7v-30a3 3 0 013-3z" fill="#1f2937" stroke="#25c2a0" stroke-width="1.5"/>
+                <rect x="28" y="37" width="24" height="3" rx="1.5" fill="#25c2a0" opacity="0.7"/>
+                <rect x="28" y="43" width="16" height="3" rx="1.5" fill="#448aff" opacity="0.6"/>
+            </svg>
+            <div class="hero-title">Message anyone on Beam</div>
+            <div class="hero-sub">Claim your @handle once. Message by name, not by address.</div>
+            <div class="hero-fee">Registration fee: 1 BEAM · Permanent</div>
+            <button class="btn btn-primary mt-8" onclick="showRegisterPage()" style="padding:14px 32px;font-size:16px;">
+                Claim your @handle
+            </button>
+        </div>
+
+        <!-- Contact list (has handle) -->
+        <div id="homeContacts" style="display:none;flex:1;overflow:hidden;flex-direction:column;display:none;">
+            <div class="search-bar-wrap">
+                <div class="search-bar">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+                    <input id="searchInput" type="text" placeholder="Search @handle..." oninput="onSearchInput(this.value)">
+                </div>
+            </div>
+            <div id="searchResults" style="display:none;" class="contact-list"></div>
+            <div id="contactList" class="contact-list"></div>
+        </div>
+
+        <!-- FAB new chat -->
+        <button class="new-chat-btn" onclick="promptNewChat()" title="New conversation">+</button>
+    </div>
+
+    <!-- REGISTER PAGE -->
+    <div id="registerPage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="showHome()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">Claim @handle</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div class="form-section">
+                <!-- Handle -->
+                <div class="form-group">
+                    <label class="form-label">Your @handle</label>
+                    <div id="handleInputWrap" class="form-input-wrap">
+                        <span class="input-prefix">@</span>
+                        <input id="handleInput" class="form-input" type="text" maxlength="32"
+                               placeholder="your_handle"
+                               oninput="onHandleInput(this.value)">
+                    </div>
+                    <div id="handleHint" class="form-hint">3–32 chars · a-z, 0-9, underscore</div>
+                </div>
+
+                <!-- Display name -->
+                <div class="form-group">
+                    <label class="form-label">Display name <span class="text-muted">(optional)</span></label>
+                    <input id="displayNameInput" class="form-input-full" type="text" maxlength="64" placeholder="Your name">
+                </div>
+
+                <!-- Wallet address -->
+                <div class="form-group">
+                    <label class="form-label">Your wallet address</label>
+                    <div class="walletid-auto-wrap">
+                        <input id="walletIdInput" class="form-input-full monospace" type="text"
+                               maxlength="70" placeholder="Paste address from Receive tab (hex)"
+                               oninput="onWalletIdInput()">
+                        <button class="auto-btn" onclick="tryAutoFillWalletId()">Auto-fill</button>
+                    </div>
+                    <div id="walletIdHint" class="form-hint">Use a <strong>permanent (never-expiring)</strong> address — contacts send messages to this address. You can update it later.</div>
+                </div>
+
+                <!-- Fee info -->
+                <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:12px 14px;font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px;">
+                    <div>Registration fee: <strong style="color:var(--text-primary);">1 BEAM</strong> · Non-refundable · Permanent until released</div>
+                    <div style="color:var(--text-muted);font-size:12px;">One @handle per wallet key</div>
+                </div>
+
+                <!-- Submit -->
+                <button id="registerBtn" class="btn btn-primary btn-full" onclick="doRegisterHandle()" disabled>
+                    Register @handle — 1 BEAM
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT PAGE -->
+    <div id="chatPage" class="page">
+        <div class="chat-header">
+            <button class="back-btn" onclick="showHome()" style="padding:6px 8px;">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            </button>
+            <div id="chatAvatarLg" class="contact-avatar" style="width:36px;height:36px;font-size:14px;"></div>
+            <div class="chat-header-info">
+                <div id="chatHeaderHandle" class="chat-header-handle"></div>
+                <div id="chatHeaderName" class="chat-header-name"></div>
+            </div>
+            <div class="icon-btn" onclick="showContactProfile(activeChat)" title="Profile">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+            </div>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-area">
+            <div class="chat-ttl-warning">⚠ Messages expire after 12 hours if unread</div>
+            <div class="chat-input-row">
+                <textarea id="chatInput" class="chat-input" rows="1"
+                    placeholder="Message..."
+                    oninput="onChatInput()"
+                    onkeydown="onChatKeydown(event)"></textarea>
+                <button id="sendBtn" class="send-btn" onclick="doSendMessage()" disabled>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                </button>
+            </div>
+            <div id="charCount" class="char-count"></div>
+        </div>
+    </div>
+
+    <!-- PROFILE PAGE (contact) -->
+    <div id="profilePage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="profileBack()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">Profile</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div class="profile-hero">
+                <div id="profileAvatar" class="profile-avatar-lg"></div>
+                <div id="profileHandle" class="profile-handle"></div>
+                <div id="profileDisplayName" class="profile-name"></div>
+                <div id="profileHeight" class="profile-height"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="detail-row">
+                    <span class="detail-label">Wallet Address</span>
+                    <span id="profileWalletId" class="detail-value"></span>
+                    <button class="copy-btn" onclick="copyProfileWalletId()">Copy</button>
+                </div>
+                <button id="profileChatBtn" class="btn btn-primary btn-full" onclick="openChatFromProfile()">
+                    💬 Send message
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MY PROFILE PAGE -->
+    <div id="myProfilePage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="showHome()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">My Profile</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div id="myProfileContent"></div>
+        </div>
+    </div>
+
+</div><!-- end app-container -->
+
+<!-- TOAST CONTAINER -->
+<div id="toastContainer"></div>
+
+<!-- CONTEXT MENU -->
+<div id="contextMenu" class="context-menu">
+    <div class="context-menu-item danger" onclick="deleteChat()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        Delete chat
+    </div>
+</div>
+
+<!-- NEW CHAT MODAL -->
+<div id="newChatModal" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-title">Start new conversation</div>
+        <div class="form-group">
+            <label class="form-label">Recipient @handle</label>
+            <div class="form-input-wrap" id="newChatHandleWrap">
+                <span class="input-prefix">@</span>
+                <input id="newChatHandleInput" class="form-input" type="text" maxlength="32"
+                       placeholder="handle" oninput="onNewChatInput(this.value)">
+            </div>
+            <div id="newChatHint" class="form-hint">Enter the @handle of the person you want to message</div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeNewChatModal()">Cancel</button>
+            <button id="newChatStartBtn" class="btn btn-primary" onclick="startNewChat()" disabled>Start chat</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== JAVASCRIPT ==================== -->
+<script>
+'use strict';
+
+// ================================================================
+// CONFIG
+// ================================================================
+var PRIVIME_CID = '5af188f81ff22cdd6b44feba0f149514ea2a9e8adcfbfabbb98e2a0bc77f3cb7';
+var GROTH_PER_BEAM = 100000000;
+var MAX_MSG_CHARS  = 950;   // 1024 byte limit with JSON overhead
+var MSG_REFRESH_MS = 2000; // 2s poll for new messages (read_messages is a local wallet call, cheap)
+
+// ================================================================
+// GLOBAL STATE
+// ================================================================
+var BEAM = null;
+var apiCallbacks  = new Map();
+var callIdCounter = 0;
+var shaderBytes   = null;
+var isConnected   = false;
+var initLock      = false;
+
+var currentPage  = 'splash';
+var activeChat   = null;   // walletIdHex of open chat (null = none)
+var profileFrom  = 'home'; // which page to return to from profile
+
+// Identity
+var myHandle     = null;   // { handle, wallet_id, display_name, registered_height }
+var myWalletId   = null;   // my own SBBS wallet address (hex string, 66 or 68 chars)
+
+// Messaging
+var contacts      = {};    // { walletIdHex: { handle, display_name } }
+var conversations = {};    // { walletIdHex: [{ text, ts, sent }] }
+var allMessages   = [];    // raw from read_messages
+var unreadCounts  = {};    // { walletIdHex: count }
+var msgPollTimer  = null;
+var isSubscribed  = false;
+
+// Lookup debounce
+var handleCheckTimer  = null;
+var newChatCheckTimer = null;
+var newChatResolved   = null; // { handle, wallet_id, display_name } or null
+
+// ================================================================
+// WALLET API
+// ================================================================
+function callApi(method, params, callback) {
+    if (!BEAM || !BEAM.api || !BEAM.api.callWalletApi) {
+        if (callback) callback({ error: { message: 'Wallet not connected' } });
+        return;
+    }
+    var id = ++callIdCounter;
+    apiCallbacks.set(id, { callback: callback, method: method });
+    try {
+        var payload = JSON.stringify({ jsonrpc: '2.0', id: id, method: method, params: params || {} });
+        BEAM.api.callWalletApi(payload);
+    } catch (e) {
+        apiCallbacks.delete(id);
+        if (callback) callback({ error: { message: e.message } });
+    }
+}
+
+function handleApiResult(json) {
+    var answer;
+    try { answer = typeof json === 'string' ? JSON.parse(json) : json; }
+    catch (e) { return; }
+    if (answer.result && (answer.result.ev_system_state || answer.result.ev_txs_changed)) {
+        onWalletEvent(answer.result);
+    }
+
+    var info = apiCallbacks.get(answer.id);
+    if (!info) return;
+    apiCallbacks.delete(answer.id);
+
+    if (answer.error) { if (info.callback) info.callback({ error: answer.error }); return; }
+
+    var result = answer.result;
+    if (result && typeof result.output === 'string') {
+        try {
+            var shader = JSON.parse(result.output);
+            if (shader.error) { if (info.callback) info.callback({ error: shader.error }); return; }
+            if (result.raw_data !== undefined) shader.raw_data = result.raw_data;
+            if (info.callback) info.callback(shader);
+        } catch (e) {
+            if (info.callback) info.callback({ error: 'Failed to parse shader response' });
+        }
+        return;
+    }
+    if (info.callback) info.callback(result);
+}
+
+function onWalletEvent(result) {
+    if (result.ev_txs_changed) {
+        if (myHandle) {
+            // Already initialized — new messages only, no need to re-run my_handle
+            loadMessages(false);
+        } else {
+            // Not yet initialized — full refresh needed (e.g. to detect handle registration TX)
+            refreshAll();
+        }
+    }
+}
+
+// ================================================================
+// SHADER HELPERS
+// ================================================================
+function privimeInvoke(role, action, extra, callback) {
+    var parts = ['role=' + role, 'action=' + action];
+    for (var k in extra) {
+        if (extra.hasOwnProperty(k) && extra[k] !== undefined && extra[k] !== '') {
+            parts.push(k + '=' + extra[k]);
+        }
+    }
+    parts.push('cid=' + PRIVIME_CID);
+    var apiParams = { args: parts.join(','), create_tx: false };
+    if (shaderBytes) apiParams.contract = shaderBytes;
+    callApi('invoke_contract', apiParams, callback);
+}
+
+function privimeTx(role, action, extra, onReady, callback) {
+    privimeInvoke(role, action, extra, function(result) {
+        if (result && result.error) { if (callback) callback(result); return; }
+        if (result && result.raw_data) {
+            if (onReady) onReady();
+            callApi('process_invoke_data', { data: result.raw_data }, callback);
+        } else {
+            if (callback) callback(result);
+        }
+    });
+}
+
+// ================================================================
+// SBBS MESSAGING
+// ================================================================
+function sendSbbsMessage(toWalletId, msgObj, callback) {
+    callApi('send_message', { receiver: toWalletId, message: msgObj }, callback);
+}
+
+function readMessages(fetchAll, callback) {
+    callApi('read_messages', { all: fetchAll ? true : false }, callback);
+}
+
+// ================================================================
+// SHADER FILE LOADING
+// ================================================================
+function loadShaderBytes(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'app.wasm', true);
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = function() {
+        if (xhr.status !== 200 && xhr.status !== 0) {
+            callback('Shader not found (HTTP ' + xhr.status + ')');
+            return;
+        }
+        if (!xhr.response || xhr.response.byteLength === 0) {
+            callback('Shader file is empty');
+            return;
+        }
+        shaderBytes = Array.from(new Uint8Array(xhr.response));
+        callback(null);
+    };
+    xhr.onerror = function() { callback('Failed to load app shader'); };
+    xhr.send();
+}
+
+// ================================================================
+// STARTUP SEQUENCE
+// ================================================================
+// ================================================================
+// LOCAL STORAGE PERSISTENCE
+// Storage is scoped per-handle so different wallets never share data.
+// Base key: privime_<cid16>
+// Handle key: privime_<cid16>_<handle>
+// lasthandle: remembers which handle to load on next cold start (for instant UI)
+// ================================================================
+var STORAGE_KEY = 'privime_' + PRIVIME_CID.slice(0, 16);
+var userStorageKey = STORAGE_KEY; // updated to per-handle key once identity is known
+
+function setUserStorageScope(handle) {
+    userStorageKey = STORAGE_KEY + '_' + handle.toLowerCase();
+}
+
+function saveToStorage() {
+    try {
+        localStorage.setItem(userStorageKey + '_conv', JSON.stringify(conversations));
+        localStorage.setItem(userStorageKey + '_contacts', JSON.stringify(contacts));
+        if (myHandle) {
+            localStorage.setItem(userStorageKey + '_handle', JSON.stringify(myHandle));
+            // Remember last handle for instant startup next time
+            localStorage.setItem(STORAGE_KEY + '_lasthandle', myHandle.handle.toLowerCase());
+        }
+    } catch(e) {}
+}
+
+function loadFromStorage() {
+    try {
+        // Use last known handle to scope the key (enables instant startup)
+        var lastHandle = localStorage.getItem(STORAGE_KEY + '_lasthandle');
+        if (lastHandle) setUserStorageScope(lastHandle);
+
+        var saved = localStorage.getItem(userStorageKey + '_conv');
+        if (saved) conversations = JSON.parse(saved);
+        saved = localStorage.getItem(userStorageKey + '_contacts');
+        if (saved) contacts = JSON.parse(saved);
+        saved = localStorage.getItem(userStorageKey + '_handle');
+        if (saved) {
+            var h = JSON.parse(saved);
+            if (h && h.handle) {
+                myHandle = h;
+                myWalletId = normalizeWalletId(h.wallet_id) || h.wallet_id;
+            }
+        }
+    } catch(e) {}
+}
+
+function onWalletConnected() {
+    isConnected = true;
+    document.getElementById('statusDot').className = 'status-dot connected';
+
+    loadFromStorage(); // Restore myHandle, conversations, contacts before first render
+
+    // If we have a cached handle, show home instantly — don't wait for shader
+    if (myHandle) {
+        showHome();
+        startMsgPoll();
+    } else {
+        setSplashStatus('Loading shader...');
+    }
+
+    loadShaderBytes(function(err) {
+        if (err) { setSplashStatus('Error: ' + err); return; }
+        subscribeToEvents();
+        refreshAll(); // Verify identity in background, update if changed
+    });
+}
+
+function refreshAll() {
+    if (!isConnected || !shaderBytes) return;
+    privimeInvoke('user', 'my_handle', {}, function(result) {
+        if (result && !result.error) {
+            applyMyHandle(result);
+        } else {
+            // Not registered
+            myHandle = null;
+            showHome();
+        }
+    });
+}
+
+function applyMyHandle(result) {
+    if (result.registered) {
+        var confirmedHandle = result.handle.toLowerCase();
+        var scopeChanged = !myHandle || myHandle.handle.toLowerCase() !== confirmedHandle;
+
+        if (scopeChanged) {
+            // Different wallet than what was cached — switch to the correct handle's storage
+            setUserStorageScope(confirmedHandle);
+            conversations = {};
+            contacts = {};
+            var saved = localStorage.getItem(userStorageKey + '_conv');
+            if (saved) try { conversations = JSON.parse(saved); } catch(e) {}
+            saved = localStorage.getItem(userStorageKey + '_contacts');
+            if (saved) try { contacts = JSON.parse(saved); } catch(e) {}
+        }
+
+        myHandle = {
+            handle: result.handle,
+            wallet_id: result.wallet_id,
+            display_name: result.display_name || '',
+            registered_height: result.registered_height
+        };
+        myWalletId = normalizeWalletId(result.wallet_id) || result.wallet_id;
+        saveToStorage();
+        showHome();
+        loadMessages(false);
+        if (!msgPollTimer) startMsgPoll();
+    } else {
+        myHandle = null;
+        showHome();
+    }
+}
+
+function loadMessages(fetchAll) {
+    readMessages(fetchAll, function(result) {
+        if (!result || result.error) return;
+        processMessages(result);
+    });
+}
+
+function processMessages(result) {
+    // read_messages returns { messages: [...] } or array
+    var msgs = result.messages || result || [];
+    if (!Array.isArray(msgs)) return;
+
+    allMessages = msgs;
+    var newUnread = {};
+
+    msgs.forEach(function(m) {
+        var payload = getMessagePayload(m);
+        if (!payload) return;
+        if (payload.v !== 1 || payload.t !== 'dm') return;
+
+        // Raw sender key from SBBS (may be 33-byte compressed pubkey = 66 hex chars)
+        var senderWalletId = (m.sender || m.from || '').trim();
+        if (!senderWalletId) return;
+
+        var text = payload.msg || '';
+        var ts   = payload.ts  || 0;
+
+        // Detect sent messages from payload.from matching our own handle
+        var sent = !!(myHandle && payload.from &&
+                      payload.from.replace(/^@/, '').toLowerCase() === myHandle.handle.toLowerCase());
+
+        // Determine conversation key — always use the registered receive address so
+        // incoming and outgoing messages for the same person share ONE conversation.
+        var convKey;
+        if (sent) {
+            convKey = (m.receiver || m.to || '').trim() || '';
+            if (!convKey) return;
+        } else if (payload.from) {
+            var fromHandle = payload.from.replace(/^@/, '').toLowerCase();
+            if (!contacts[senderWalletId]) contacts[senderWalletId] = {};
+            if (!contacts[senderWalletId].handle) contacts[senderWalletId].handle = fromHandle;
+            // Use the receive address as canonical key if already resolved; otherwise
+            // temporarily use senderKey and merge later when resolve completes.
+            convKey = contacts[senderWalletId].wallet_id || senderWalletId;
+            if (!contacts[senderWalletId].wallet_id) {
+                resolveHandleIntoContact(fromHandle, senderWalletId);
+            }
+        } else {
+            convKey = senderWalletId;
+            resolveWalletIdToContact(senderWalletId);
+        }
+        if (!convKey) return;
+
+        if (!conversations[convKey]) conversations[convKey] = [];
+
+        // Avoid duplicates by ts+text+sent
+        var exists = conversations[convKey].some(function(x) { return x.ts === ts && x.text === text && x.sent === sent; });
+        if (!exists) {
+            conversations[convKey].push({ text: text, ts: ts, sent: sent });
+        }
+
+        // Track unread (messages not in activeChat that are received)
+        if (!sent && convKey !== activeChat) {
+            newUnread[convKey] = (newUnread[convKey] || 0) + 1;
+        }
+    });
+
+    // Sort conversations chronologically
+    for (var key in conversations) {
+        conversations[key].sort(function(a, b) { return a.ts - b.ts; });
+    }
+
+    unreadCounts = newUnread;
+
+    saveToStorage();
+
+    if (currentPage === 'chat' && activeChat) {
+        renderChatMessages(activeChat);
+        unreadCounts[activeChat] = 0;
+    }
+    if (currentPage === 'home') {
+        renderContactList();
+    }
+}
+
+function getMessagePayload(m) {
+    try {
+        var p = m.message || m.payload || m;
+        if (typeof p === 'string') p = JSON.parse(p);
+        return (p && p.v === 1) ? p : null;
+    } catch (e) { return null; }
+}
+
+// ================================================================
+// CONTACT RESOLUTION
+// ================================================================
+function resolveWalletIdToContact(walletId) {
+    if (contacts[walletId] && contacts[walletId].handle) return;
+    var norm = normalizeWalletId(walletId) || walletId;
+    privimeInvoke('user', 'resolve_walletid', { walletid: norm }, function(result) {
+        if (result && !result.error && result.handle) {
+            contacts[walletId] = contacts[walletId] || {};
+            contacts[walletId].handle = result.handle;
+            contacts[walletId].display_name = result.display_name || '';
+            if (currentPage === 'home') renderContactList();
+            if (currentPage === 'chat' && activeChat === walletId) renderChatMessages(walletId);
+        }
+    });
+}
+
+// Resolve @handle → receive address, populating contacts[convKey].wallet_id for replies.
+// convKey is the raw sender key from read_messages (may be compressed pubkey, not receive addr).
+function resolveHandleIntoContact(handle, convKey) {
+    privimeInvoke('user', 'resolve_handle', { handle: handle }, function(result) {
+        if (result && !result.error && result.wallet_id) {
+            var receiveAddr = result.wallet_id;
+
+            // Update both keys in contacts
+            if (!contacts[convKey]) contacts[convKey] = {};
+            contacts[convKey].handle = handle;
+            contacts[convKey].wallet_id = receiveAddr;
+            contacts[convKey].display_name = result.display_name || '';
+            contacts[receiveAddr] = contacts[receiveAddr] || {};
+            contacts[receiveAddr].handle = handle;
+            contacts[receiveAddr].wallet_id = receiveAddr;
+            contacts[receiveAddr].display_name = result.display_name || '';
+
+            // Merge split conversations: senderKey bucket → receiveAddr bucket
+            if (convKey !== receiveAddr && conversations[convKey] && conversations[convKey].length > 0) {
+                if (!conversations[receiveAddr]) conversations[receiveAddr] = [];
+                conversations[convKey].forEach(function(msg) {
+                    var dup = conversations[receiveAddr].some(function(x) {
+                        return x.ts === msg.ts && x.text === msg.text && x.sent === msg.sent;
+                    });
+                    if (!dup) conversations[receiveAddr].push(msg);
+                });
+                conversations[receiveAddr].sort(function(a, b) { return a.ts - b.ts; });
+                delete conversations[convKey];
+                delete unreadCounts[convKey];
+                // Redirect active chat if user was viewing the old senderKey chat
+                if (activeChat === convKey) {
+                    activeChat = receiveAddr;
+                    unreadCounts[receiveAddr] = 0;
+                }
+            }
+
+            saveToStorage();
+            if (currentPage === 'home') renderContactList();
+            if (currentPage === 'chat' && (activeChat === convKey || activeChat === receiveAddr)) {
+                renderChatMessages(activeChat);
+            }
+        }
+    });
+}
+
+function resolveHandleToContact(handle, callback) {
+    privimeInvoke('user', 'resolve_handle', { handle: handle.toLowerCase() }, function(result) {
+        if (result && !result.error && result.wallet_id) {
+            var wid = result.wallet_id;
+            contacts[wid] = { handle: handle.toLowerCase(), display_name: result.display_name || '' };
+            callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: result.display_name || '', registered_height: result.registered_height });
+        } else {
+            callback(result && result.error ? extractError(result) : 'Not found');
+        }
+    });
+}
+
+// ================================================================
+// EVENT SUBSCRIPTION & POLLING
+// ================================================================
+function subscribeToEvents() {
+    if (isSubscribed) return;
+    isSubscribed = true;
+    callApi('ev_subunsub', { ev_txs_changed: true }, function() {});
+}
+
+function startMsgPoll() {
+    if (msgPollTimer) clearInterval(msgPollTimer);
+    msgPollTimer = setInterval(function() {
+        if (isConnected && myHandle) loadMessages(false);
+    }, MSG_REFRESH_MS);
+}
+
+// ================================================================
+// PAGE NAVIGATION
+// ================================================================
+function showPage(id) {
+    currentPage = id.replace('Page', '');
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById(id).classList.add('active');
+}
+
+function showHome() {
+    showPage('homePage');
+    renderHome();
+}
+
+function showRegisterPage() {
+    showPage('registerPage');
+}
+
+function showChatPage(walletId) {
+    activeChat = walletId;
+    unreadCounts[walletId] = 0;
+    var contact = contacts[walletId] || {};
+    var handle  = contact.handle || shortWalletId(walletId);
+    var name    = contact.display_name || '';
+
+    document.getElementById('chatAvatarLg').textContent = handle.charAt(0).toUpperCase();
+    document.getElementById('chatHeaderHandle').textContent = '@' + handle;
+    document.getElementById('chatHeaderName').textContent = name;
+
+    showPage('chatPage');
+    renderChatMessages(walletId);
+    startMsgPoll();
+    document.getElementById('chatInput').focus();
+}
+
+function showContactProfile(walletId) {
+    profileFrom = currentPage;
+    var contact = contacts[walletId] || {};
+    var handle  = contact.handle || shortWalletId(walletId);
+    var name    = contact.display_name || '';
+
+    document.getElementById('profileAvatar').textContent = handle.charAt(0).toUpperCase();
+    document.getElementById('profileHandle').textContent = '@' + handle;
+    document.getElementById('profileDisplayName').textContent = name;
+    document.getElementById('profileHeight').textContent = '';
+    document.getElementById('profileWalletId').textContent = walletId;
+    document.getElementById('profilePage').dataset.walletId = walletId;
+
+    // Try to load registered_height
+    if (contact.handle) {
+        privimeInvoke('user', 'resolve_handle', { handle: contact.handle }, function(r) {
+            if (r && !r.error) {
+                document.getElementById('profileHeight').textContent = 'Registered block #' + r.registered_height;
+            }
+        });
+    }
+    showPage('profilePage');
+}
+
+function profileBack() {
+    if (profileFrom === 'chat') {
+        showChatPage(activeChat);
+    } else {
+        showHome();
+    }
+}
+
+function openChatFromProfile() {
+    var walletId = document.getElementById('profilePage').dataset.walletId;
+    showChatPage(walletId);
+}
+
+function copyProfileWalletId() {
+    var wid = document.getElementById('profileWalletId').textContent;
+    copyToClipboard(wid);
+}
+
+function showMyProfile() {
+    renderMyProfileContent();
+    showPage('myProfilePage');
+}
+
+// ================================================================
+// HOME RENDERING
+// ================================================================
+function renderHome() {
+    if (!myHandle) {
+        document.getElementById('homeHandleLabel').textContent = '';
+        document.getElementById('homeHero').style.display = 'flex';
+        document.getElementById('homeContacts').style.display = 'none';
+    } else {
+        document.getElementById('homeHandleLabel').textContent = '@' + myHandle.handle;
+        document.getElementById('homeHero').style.display = 'none';
+        var c = document.getElementById('homeContacts');
+        c.style.display = 'flex';
+        c.style.flexDirection = 'column';
+        renderContactList();
+    }
+}
+
+function renderContactList() {
+    var list = document.getElementById('contactList');
+    var walletIds = Object.keys(conversations);
+
+    if (walletIds.length === 0) {
+        list.innerHTML = '<div class="contacts-empty">No conversations yet.<br>Search for a @handle to start chatting.</div>';
+        return;
+    }
+
+    // Sort by latest message timestamp (newest first)
+    walletIds.sort(function(a, b) {
+        var aLast = lastMessage(conversations[a]);
+        var bLast = lastMessage(conversations[b]);
+        return (bLast ? bLast.ts : 0) - (aLast ? aLast.ts : 0);
+    });
+
+    list.innerHTML = walletIds.map(function(wid) {
+        var contact = contacts[wid] || {};
+        var handle  = contact.handle || shortWalletId(wid);
+        var name    = contact.display_name || '';
+        var last    = lastMessage(conversations[wid]);
+        var unread  = unreadCounts[wid] || 0;
+        var preview = last ? escHtml(last.text.substring(0, 60)) : '';
+        var timeStr = last ? formatTs(last.ts) : '';
+        var initial = handle.charAt(0).toUpperCase();
+        var badge   = unread > 0 ? '<span class="unread-badge">' + Math.min(unread, 9) + '</span>' : '';
+
+        return '<div class="contact-item" onclick="showChatPage(\'' + wid + '\')" oncontextmenu="showContactContextMenu(event,\'' + wid + '\')">' +
+            '<div class="contact-avatar">' + initial + badge + '</div>' +
+            '<div class="contact-info">' +
+                '<div class="contact-name">@' + escHtml(handle) + (name ? ' <span style="font-weight:400;color:var(--text-muted);">· ' + escHtml(name) + '</span>' : '') + '</div>' +
+                '<div class="contact-preview">' + (last && last.sent ? '<span style="color:var(--text-muted);">You: </span>' : '') + preview + '</div>' +
+            '</div>' +
+            '<div class="contact-meta"><div class="contact-time">' + timeStr + '</div></div>' +
+        '</div>';
+    }).join('');
+}
+
+function lastMessage(msgs) {
+    if (!msgs || msgs.length === 0) return null;
+    return msgs[msgs.length - 1];
+}
+
+// ================================================================
+// CONTACT CONTEXT MENU
+// ================================================================
+var contextMenuTarget = null;
+
+function showContactContextMenu(e, wid) {
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenuTarget = wid;
+    var menu = document.getElementById('contextMenu');
+    var x = Math.min(e.clientX, window.innerWidth - 180);
+    var y = Math.min(e.clientY, window.innerHeight - 60);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+    menu.classList.add('active');
+}
+
+function hideContextMenu() {
+    document.getElementById('contextMenu').classList.remove('active');
+    contextMenuTarget = null;
+}
+
+function deleteChat() {
+    if (!contextMenuTarget) return;
+    var wid = contextMenuTarget;
+    hideContextMenu();
+    delete conversations[wid];
+    delete unreadCounts[wid];
+    saveToStorage();
+    renderContactList();
+}
+
+document.addEventListener('click', hideContextMenu);
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hideContextMenu(); });
+
+// ================================================================
+// CHAT RENDERING
+// ================================================================
+function renderChatMessages(walletId) {
+    var msgs = conversations[walletId] || [];
+    var el   = document.getElementById('chatMessages');
+
+    if (msgs.length === 0) {
+        el.innerHTML = '<div class="chat-empty"><div style="font-size:40px;margin-bottom:12px;">💬</div><div>No messages yet.</div><div style="margin-top:6px;font-size:12px;">Messages expire after 12 hours</div></div>';
+        return;
+    }
+
+    el.innerHTML = msgs.map(function(m) {
+        var cls  = m.sent ? 'sent' : 'received';
+        var time = formatTime(m.ts);
+        return '<div class="msg-bubble ' + cls + '">' +
+            escHtml(m.text) +
+            '<div class="msg-time">' + time + '</div>' +
+        '</div>';
+    }).join('');
+
+    // Scroll to bottom
+    el.scrollTop = el.scrollHeight;
+}
+
+// ================================================================
+// CHAT INPUT
+// ================================================================
+function onChatInput() {
+    var input = document.getElementById('chatInput');
+    var text  = input.value;
+    var len   = text.length;
+    var btn   = document.getElementById('sendBtn');
+    var cc    = document.getElementById('charCount');
+
+    // Auto-resize textarea
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+
+    btn.disabled = (len === 0 || len > MAX_MSG_CHARS);
+
+    if (len > MAX_MSG_CHARS) {
+        cc.textContent = len + ' / ' + MAX_MSG_CHARS + ' (too long)';
+        cc.className = 'char-count at-limit';
+    } else if (len > MAX_MSG_CHARS * 0.85) {
+        cc.textContent = len + ' / ' + MAX_MSG_CHARS;
+        cc.className = 'char-count near-limit';
+    } else if (len > 0) {
+        cc.textContent = len + ' / ' + MAX_MSG_CHARS;
+        cc.className = 'char-count';
+    } else {
+        cc.textContent = '';
+    }
+}
+
+function onChatKeydown(e) {
+    // Ctrl+Enter or Enter on desktop (not mobile) to send
+    if (e.key === 'Enter' && !e.shiftKey && !isMobile()) {
+        e.preventDefault();
+        doSendMessage();
+    }
+}
+
+function isMobile() {
+    return /android|iphone|ipad/i.test(navigator.userAgent);
+}
+
+function doSendMessage() {
+    var input  = document.getElementById('chatInput');
+    var text   = input.value.trim();
+    if (!text || !activeChat || !myWalletId) return;
+    if (text.length > MAX_MSG_CHARS) { showToast('Message too long (max ' + MAX_MSG_CHARS + ' chars)', 'warning'); return; }
+
+    var btn = document.getElementById('sendBtn');
+    btn.disabled = true;
+
+    var msgObj = { v: 1, t: 'dm', msg: text, ts: Math.floor(Date.now() / 1000) };
+    if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+
+    // Instant UI — show bubble and clear input immediately before API call
+    var convKey = activeChat;
+    if (!conversations[convKey]) conversations[convKey] = [];
+    conversations[convKey].push({ text: text, ts: msgObj.ts, sent: true });
+    saveToStorage();
+    input.value = '';
+    input.style.height = 'auto';
+    document.getElementById('charCount').textContent = '';
+    renderChatMessages(convKey);
+
+    // Use registered receive address if available (needed when activeChat is a raw sender key)
+    var receiver = (contacts[activeChat] && contacts[activeChat].wallet_id) || activeChat;
+
+    sendSbbsMessage(receiver, msgObj, function(result) {
+        btn.disabled = false;
+        if (result && result.error) {
+            // Roll back optimistic message on failure
+            conversations[convKey] = conversations[convKey].filter(function(m) {
+                return !(m.sent && m.ts === msgObj.ts && m.text === text);
+            });
+            saveToStorage();
+            renderChatMessages(convKey);
+            showToast('Send failed: ' + extractError(result), 'error');
+        }
+    });
+}
+
+// ================================================================
+// HANDLE REGISTRATION
+// ================================================================
+var handleValid   = false;
+var walletIdValid = false;
+
+function onHandleInput(val) {
+    var wrap = document.getElementById('handleInputWrap');
+    var hint = document.getElementById('handleHint');
+    wrap.className = 'form-input-wrap';
+
+    if (handleCheckTimer) clearTimeout(handleCheckTimer);
+
+    var h = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (val !== h) document.getElementById('handleInput').value = h;
+    val = h;
+
+    handleValid = false;
+    updateRegisterBtn();
+
+    if (val.length < 3) {
+        hint.textContent = val.length === 0 ? '3–32 chars · a-z, 0-9, underscore' : 'Too short (min 3 chars)';
+        hint.className = 'form-hint';
+        return;
+    }
+    if (val.length > 32) {
+        hint.textContent = 'Too long (max 32 chars)';
+        hint.className = 'form-hint';
+        return;
+    }
+
+    if (!shaderBytes) {
+        hint.textContent = 'Still connecting — try again in a moment';
+        hint.className = 'form-hint';
+        return;
+    }
+
+    hint.textContent = 'Checking availability...';
+    hint.className = 'form-hint checking';
+
+    handleCheckTimer = setTimeout(function() {
+        privimeInvoke('user', 'resolve_handle', { handle: val }, function(result) {
+            // Stale check (user typed something else)
+            var currentVal = document.getElementById('handleInput') ? document.getElementById('handleInput').value : '?';
+            if (val !== currentVal) return;
+            var errStr = result && result.error ? (typeof result.error === 'string' ? result.error : (result.error.message || '')) : '';
+            if (errStr === 'handle not found') {
+                handleValid = true;
+                wrap.className = 'form-input-wrap valid';
+                hint.textContent = '✓ Available';
+                hint.className = 'form-hint available';
+            } else if (result && !result.error && result.wallet_id) {
+                handleValid = false;
+                wrap.className = 'form-input-wrap invalid';
+                hint.textContent = '✗ Already taken';
+                hint.className = 'form-hint taken';
+            } else {
+                hint.textContent = 'Could not check — check connection and retry';
+                hint.className = 'form-hint';
+            }
+            updateRegisterBtn();
+        });
+    }, 600);
+}
+
+// Beam SBBS addresses can display with variable length (leading zeros stripped):
+//   65/67 = odd hex  → prepend '0' to make even
+//   66    = 33 bytes → pad to 68
+//   68    = 34 bytes → exact match (contract format)
+// normalizeWalletId always returns a 68-char hex string or null.
+function normalizeWalletId(val) {
+    val = val.replace(/\s/g, '');
+    if (val.slice(0, 2).toLowerCase() === '0x') val = val.slice(2);
+    if (!/^[0-9a-fA-F]*$/.test(val)) return null;
+    if (val.length % 2 !== 0) val = '0' + val;      // odd → prepend 0
+    if (val.length < 62 || val.length > 68) return null; // too short/long
+    if (val.length < 68) val = val.padStart(68, '0'); // left-pad to 34 bytes
+    return val; // always 68 hex chars
+}
+
+function isValidWalletId(val) {
+    return normalizeWalletId(val) !== null;
+}
+
+function onWalletIdInput() {
+    var val = document.getElementById('walletIdInput').value.trim();
+    var hint = document.getElementById('walletIdHint');
+    walletIdValid = isValidWalletId(val);
+    if (val.length === 0) {
+        hint.textContent = 'Your wallet address for receiving messages.';
+        hint.className = 'form-hint';
+    } else if (walletIdValid) {
+        var normalized = normalizeWalletId(val);
+        var paddedNote = (val.replace(/\s/g, '').replace(/^0x/i, '').length < 68) ? ' (padded to 34 bytes)' : '';
+        hint.textContent = '✓ Valid address' + paddedNote;
+        hint.className = 'form-hint available';
+    } else if (/[^0-9a-fA-F\s]/.test(val.replace(/^0x/i, ''))) {
+        hint.textContent = 'Must be hex characters only';
+        hint.className = 'form-hint taken';
+    } else {
+        hint.textContent = val.replace(/\s/g, '').length + ' chars — expected 66–68 (paste from wallet Receive tab)';
+        hint.className = 'form-hint taken';
+    }
+    updateRegisterBtn();
+}
+
+function updateRegisterBtn() {
+    document.getElementById('registerBtn').disabled = !(handleValid && walletIdValid);
+}
+
+function tryAutoFillWalletId() {
+    // Use cached wallet address if available (from a previous read_messages call)
+    if (myWalletId) {
+        var norm = normalizeWalletId(myWalletId);
+        if (norm) {
+            document.getElementById('walletIdInput').value = norm;
+            onWalletIdInput();
+            showToast('Address auto-filled', 'success');
+            return;
+        }
+    }
+
+    // create_address is APPS_ALLOWED — creates a never-expiring SBBS address
+    callApi('create_address', { type: 'regular', expiration: 'never' }, function(result) {
+        var addr = typeof result === 'string' ? result : (result && (result.address || result.result || ''));
+        var normalized = addr ? normalizeWalletId(addr) : null;
+        if (normalized) {
+            document.getElementById('walletIdInput').value = normalized;
+            onWalletIdInput();
+            showToast('Address created and filled', 'success');
+            return;
+        }
+        showToast('Auto-fill unavailable — paste your address from the wallet Receive tab', 'warning');
+    });
+}
+
+function doRegisterHandle() {
+    if (!handleValid || !walletIdValid) return;
+    var handle  = document.getElementById('handleInput').value.trim();
+    var walletIdRaw = document.getElementById('walletIdInput').value.trim();
+    var walletId = normalizeWalletId(walletIdRaw); // always 68 hex chars (34 bytes)
+    var displayName = document.getElementById('displayNameInput').value.trim();
+
+    if (!walletId) { showToast('Invalid wallet address', 'error'); return; }
+
+    var btn = document.getElementById('registerBtn');
+    btn.disabled = true;
+    btn.textContent = 'Preparing...';
+
+    var extra = { handle: handle, wallet_id: walletId };
+    if (displayName) extra.display_name = displayName;
+
+    privimeTx('user', 'register_handle', extra,
+        function() { btn.textContent = 'Confirm in wallet...'; },
+        function(result) {
+            btn.disabled = false;
+            btn.textContent = 'Register @handle — 1 BEAM';
+            if (result && result.error) {
+                showToast('Registration failed: ' + extractError(result), 'error');
+                return;
+            }
+            showToast('@' + handle + ' registered!', 'success');
+            // Refresh identity (walletId already normalized to 68 chars)
+            myWalletId = walletId;
+            refreshAll();
+        }
+    );
+}
+
+// ================================================================
+// NEW CHAT MODAL
+// ================================================================
+function promptNewChat() {
+    document.getElementById('newChatHandleInput').value = '';
+    document.getElementById('newChatHint').textContent = 'Enter the @handle of the person you want to message';
+    document.getElementById('newChatHint').className = 'form-hint';
+    document.getElementById('newChatHandleWrap').className = 'form-input-wrap';
+    document.getElementById('newChatStartBtn').disabled = true;
+    newChatResolved = null;
+    document.getElementById('newChatModal').classList.add('active');
+    setTimeout(function() { document.getElementById('newChatHandleInput').focus(); }, 100);
+}
+
+function closeNewChatModal() {
+    document.getElementById('newChatModal').classList.remove('active');
+}
+
+function onNewChatInput(val) {
+    var hint = document.getElementById('newChatHint');
+    var wrap = document.getElementById('newChatHandleWrap');
+    var btn  = document.getElementById('newChatStartBtn');
+    wrap.className = 'form-input-wrap';
+    newChatResolved = null;
+    btn.disabled = true;
+
+    if (newChatCheckTimer) clearTimeout(newChatCheckTimer);
+    val = val.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    document.getElementById('newChatHandleInput').value = val;
+
+    if (val.length < 3) {
+        hint.textContent = 'Enter at least 3 characters';
+        hint.className = 'form-hint';
+        return;
+    }
+
+    hint.textContent = 'Looking up @' + val + '...';
+    hint.className = 'form-hint checking';
+
+    newChatCheckTimer = setTimeout(function() {
+        resolveHandleToContact(val, function(err, contact) {
+            if (err) {
+                wrap.className = 'form-input-wrap invalid';
+                hint.textContent = '✗ @' + val + ' not found';
+                hint.className = 'form-hint taken';
+            } else {
+                wrap.className = 'form-input-wrap valid';
+                hint.textContent = '✓ Found: ' + (contact.display_name || contact.handle);
+                hint.className = 'form-hint available';
+                newChatResolved = contact;
+                btn.disabled = false;
+            }
+        });
+    }, 500);
+}
+
+function startNewChat() {
+    if (!newChatResolved) return;
+    closeNewChatModal();
+    showChatPage(newChatResolved.wallet_id);
+}
+
+// ================================================================
+// SEARCH BAR
+// ================================================================
+function onSearchInput(val) {
+    var results = document.getElementById('searchResults');
+    var list    = document.getElementById('contactList');
+
+    if (!val.trim()) {
+        results.style.display = 'none';
+        list.style.display = '';
+        return;
+    }
+
+    results.style.display = '';
+    list.style.display = 'none';
+    results.innerHTML = '<div style="padding:12px 16px;font-size:13px;color:var(--text-muted);">Searching...</div>';
+
+    var q = val.trim().replace(/^@/, '').toLowerCase();
+    privimeInvoke('user', 'resolve_handle', { handle: q }, function(result) {
+        if (val !== document.getElementById('searchInput').value) return; // stale
+        if (result && !result.error && result.wallet_id) {
+            var wid = result.wallet_id;
+            contacts[wid] = contacts[wid] || { handle: q, display_name: result.display_name || '' };
+            var initial = q.charAt(0).toUpperCase();
+            results.innerHTML =
+                '<div class="search-result-item" onclick="showChatPage(\'' + wid + '\')">' +
+                '<div class="contact-avatar" style="width:40px;height:40px;font-size:16px;">' + initial + '</div>' +
+                '<div><div class="search-result-name">@' + escHtml(q) + '</div>' +
+                '<div class="search-result-sub">' + escHtml(result.display_name || '') + '</div></div>' +
+                '</div>';
+        } else {
+            results.innerHTML = '<div style="padding:12px 16px;font-size:13px;color:var(--text-muted);">No results for @' + escHtml(q) + '</div>';
+        }
+    });
+}
+
+// ================================================================
+// MY PROFILE
+// ================================================================
+function renderMyProfileContent() {
+    var el = document.getElementById('myProfileContent');
+    if (!myHandle) {
+        el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">No @handle registered.</div>' +
+            '<div style="padding:0 16px;"><button class="btn btn-primary btn-full" onclick="showRegisterPage()">Claim @handle</button></div>';
+        return;
+    }
+
+    el.innerHTML =
+        '<div style="padding:32px 24px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;">' +
+        '<div class="profile-avatar-lg">' + myHandle.handle.charAt(0).toUpperCase() + '</div>' +
+        '<div class="profile-handle">@' + escHtml(myHandle.handle) + '</div>' +
+        (myHandle.display_name ? '<div class="profile-name">' + escHtml(myHandle.display_name) + '</div>' : '') +
+        '<div class="profile-height">Registered block #' + myHandle.registered_height + '</div>' +
+        '</div>' +
+        '<div style="padding:0 16px;display:flex;flex-direction:column;gap:12px;">' +
+        '<div class="detail-row">' +
+            '<span class="detail-label">Wallet Address</span>' +
+            '<span class="detail-value">' + shortWalletId(myHandle.wallet_id) + '</span>' +
+            '<button class="copy-btn" onclick="copyToClipboard(' + JSON.stringify(myHandle.wallet_id) + ')">Copy</button>' +
+        '</div>' +
+        '<div id="updateAddrSection">' +
+        '<button class="btn btn-secondary btn-full mt-8" onclick="showUpdateAddr()">Update Address</button>' +
+        '<div class="form-hint">If your registered address expires, update it here.</div>' +
+        '</div>' +
+        '<div id="updateAddrForm" style="display:none;margin-top:12px;display:none;">' +
+        '<div class="walletid-auto-wrap" style="margin-bottom:6px;">' +
+        '<input id="updateWalletIdInput" class="form-input-full monospace" maxlength="70" placeholder="New wallet address (hex)" oninput="onUpdateWalletIdInput()">' +
+        '<button class="auto-btn" onclick="tryAutoFillUpdateAddr()">Auto-fill</button>' +
+        '</div>' +
+        '<div id="updateWalletIdHint" class="form-hint">Paste your new permanent address.</div>' +
+        '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        '<button id="updateAddrBtn" class="btn btn-primary" style="flex:1;" onclick="doUpdateAddress()" disabled>Update</button>' +
+        '<button class="btn btn-secondary" style="flex:1;" onclick="hideUpdateAddr()">Cancel</button>' +
+        '</div></div>' +
+        '<div class="danger-zone">' +
+        '<div class="section-title text-danger">Danger Zone</div>' +
+        '<button class="btn btn-danger btn-full mt-8" onclick="confirmReleaseHandle()">Release @' + escHtml(myHandle.handle) + '</button>' +
+        '<div class="form-hint mt-8">Permanently releases your @handle. No refund.</div>' +
+        '</div>' +
+        '</div>';
+}
+
+// ================================================================
+// UPDATE ADDRESS
+// ================================================================
+var updateAddrValid = false;
+
+function showUpdateAddr() {
+    var form = document.getElementById('updateAddrForm');
+    if (form) { form.style.display = 'block'; }
+    document.getElementById('updateWalletIdInput').value = '';
+    document.getElementById('updateWalletIdHint').textContent = 'Paste your new permanent address.';
+    document.getElementById('updateWalletIdHint').className = 'form-hint';
+    updateAddrValid = false;
+    document.getElementById('updateAddrBtn').disabled = true;
+}
+
+function hideUpdateAddr() {
+    var form = document.getElementById('updateAddrForm');
+    if (form) form.style.display = 'none';
+}
+
+function onUpdateWalletIdInput() {
+    var val = document.getElementById('updateWalletIdInput').value.trim();
+    var hint = document.getElementById('updateWalletIdHint');
+    updateAddrValid = isValidWalletId(val);
+    if (val.length === 0) {
+        hint.textContent = 'Paste your new permanent address.';
+        hint.className = 'form-hint';
+    } else if (updateAddrValid) {
+        hint.textContent = '✓ Valid address';
+        hint.className = 'form-hint available';
+    } else {
+        hint.textContent = 'Invalid — must be 66–68 hex chars';
+        hint.className = 'form-hint taken';
+    }
+    document.getElementById('updateAddrBtn').disabled = !updateAddrValid;
+}
+
+function tryAutoFillUpdateAddr() {
+    if (myWalletId) {
+        var norm = normalizeWalletId(myWalletId);
+        if (norm) {
+            document.getElementById('updateWalletIdInput').value = norm;
+            onUpdateWalletIdInput();
+            return;
+        }
+    }
+    callApi('create_address', { type: 'regular', expiration: 'never' }, function(result) {
+        var addr = typeof result === 'string' ? result : (result && (result.address || result.result || ''));
+        var norm = addr ? normalizeWalletId(addr) : null;
+        if (norm) {
+            document.getElementById('updateWalletIdInput').value = norm;
+            onUpdateWalletIdInput();
+            return;
+        }
+        showToast('Auto-fill unavailable — paste your address manually', 'warning');
+    });
+}
+
+function doUpdateAddress() {
+    if (!updateAddrValid) return;
+    var walletIdRaw = document.getElementById('updateWalletIdInput').value.trim();
+    var walletId = normalizeWalletId(walletIdRaw);
+    if (!walletId) { showToast('Invalid wallet address', 'error'); return; }
+
+    var btn = document.getElementById('updateAddrBtn');
+    btn.disabled = true;
+    btn.textContent = 'Preparing...';
+
+    privimeTx('user', 'update_profile', { wallet_id: walletId },
+        function() { btn.textContent = 'Confirm in wallet...'; },
+        function(result) {
+            btn.disabled = false;
+            btn.textContent = 'Update';
+            if (result && result.error) {
+                showToast('Update failed: ' + extractError(result), 'error');
+                return;
+            }
+            showToast('Address updated!', 'success');
+            myWalletId = walletId;
+            if (myHandle) myHandle.wallet_id = walletId;
+            hideUpdateAddr();
+            renderMyProfileContent();
+        }
+    );
+}
+
+function confirmReleaseHandle() {
+    if (!confirm('Release @' + myHandle.handle + '?\n\nThis is permanent and there is no refund.')) return;
+    privimeTx('user', 'release_handle', {},
+        function() { showToast('Confirm in wallet...', 'info'); },
+        function(result) {
+            if (result && result.error) {
+                showToast('Failed: ' + extractError(result), 'error');
+                return;
+            }
+            showToast('@' + myHandle.handle + ' released', 'success');
+            myHandle = null;
+            myWalletId = null;
+            showHome();
+        }
+    );
+}
+
+// ================================================================
+// HELPERS
+// ================================================================
+function extractError(r) {
+    if (typeof r === 'string') return r;
+    if (r && r.error && typeof r.error === 'object') return r.error.message || JSON.stringify(r.error);
+    if (r && typeof r.error === 'string') return r.error;
+    return (r && r.message) || 'Unknown error';
+}
+
+function shortWalletId(wid) {
+    if (!wid || wid.length < 16) return wid || '';
+    return wid.substring(0, 8) + '...' + wid.substring(wid.length - 8);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function formatTs(ts) {
+    if (!ts) return '';
+    var now  = Math.floor(Date.now() / 1000);
+    var diff = now - ts;
+    if (diff < 60)   return 'now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h';
+    return Math.floor(diff / 86400) + 'd';
+}
+
+function formatTime(ts) {
+    if (!ts) return '';
+    var d = new Date(ts * 1000);
+    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+}
+
+function copyToClipboard(text) {
+    try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Copied to clipboard', 'success');
+    } catch (e) {
+        showToast('Copy failed', 'error');
+    }
+}
+
+function showToast(msg, type) {
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast ' + (type || 'info');
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 3000);
+}
+
+function setSplashStatus(msg) {
+    document.getElementById('splashStatus').textContent = msg;
+}
+
+// ================================================================
+// WALLET CONNECTION
+// ================================================================
+function initDesktopWallet() {
+    var script = document.createElement('script');
+    script.src = 'qrc:///qtwebchannel/qwebchannel.js';
+    script.onload = function() {
+        try {
+            new QWebChannel(qt.webChannelTransport, function(channel) {
+                BEAM = channel.objects.BEAM;
+                if (!BEAM || !BEAM.api) { setSplashStatus('BEAM API not found'); return; }
+                if (BEAM.api.callWalletApiResult && typeof BEAM.api.callWalletApiResult.connect === 'function') {
+                    BEAM.api.callWalletApiResult.connect(handleApiResult);
+                } else if (typeof BEAM.api.callWalletApiResult === 'function') {
+                    BEAM.api.callWalletApiResult(handleApiResult);
+                } else {
+                    BEAM.api.callWalletApiResult = handleApiResult;
+                }
+                onWalletConnected();
+            });
+        } catch (e) { setSplashStatus('WebChannel error: ' + e.message); }
+    };
+    script.onerror = function() { setSplashStatus('Failed to load Qt WebChannel'); };
+    document.head.appendChild(script);
+}
+
+function detectAndConnect() {
+    if (initLock) return;
+    initLock = true;
+    setSplashStatus('Connecting to Beam Wallet...');
+
+    if (typeof qt !== 'undefined') {
+        initDesktopWallet();
+    } else if (window.BEAM) {
+        BEAM = window.BEAM;
+        if (/android/i.test(navigator.userAgent)) {
+            document.addEventListener('onCallWalletApiResult', function(ev) { handleApiResult(ev.detail); });
+        } else if (typeof BEAM.callWalletApiResult === 'function') {
+            BEAM.callWalletApiResult(handleApiResult);
+        }
+        onWalletConnected();
+    } else {
+        setSplashStatus('No Beam Wallet detected. Open from within the Beam Desktop Wallet.');
+    }
+}
+
+// ================================================================
+// INIT
+// ================================================================
+function init() {
+    detectAndConnect();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+</script>
+
+</body>
+</html>

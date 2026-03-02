@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Background -->
+  <rect width="100" height="100" rx="22" fill="#0a0e17"/>
+  <!-- Chat bubble -->
+  <path d="M18 28 C18 22 22 18 28 18 L72 18 C78 18 82 22 82 28 L82 58 C82 64 78 68 72 68 L35 68 L22 82 L22 68 L28 68 C22 68 18 64 18 58 Z" fill="#151d2e" stroke="#25c2a0" stroke-width="2.5"/>
+  <!-- Message lines -->
+  <rect x="30" y="32" width="40" height="6" rx="3" fill="#25c2a0" opacity="0.85"/>
+  <rect x="30" y="43" width="28" height="6" rx="3" fill="#448aff" opacity="0.75"/>
+  <rect x="30" y="54" width="34" height="6" rx="3" fill="#25c2a0" opacity="0.55"/>
+</svg>
