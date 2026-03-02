@@ -3,8 +3,8 @@
 # Run from: dapps/privibets/
 #
 # Prerequisites:
-#   - Shaders compiled (shaders/app.wasm exists)
-#   - UI updated (ui/index.html has correct CID)
+#   - Shaders compiled (shaders/app.wasm + shaders/roulette_app.wasm)
+#   - UI updated (ui/index.html has correct CIDs)
 #   - 7-Zip installed at C:\Program Files\7-Zip\7z.exe
 
 set -e
@@ -19,6 +19,7 @@ mkdir -p build/app
 cp ui/index.html build/app/
 cp ui/appicon.svg build/app/
 cp shaders/app.wasm build/app/
+cp shaders/roulette_app.wasm build/app/
 cp manifest.json build/
 
 echo "Build staging ready:"
