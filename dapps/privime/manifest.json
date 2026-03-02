@@ -1,0 +1,10 @@
+{
+  "name": "PriviMe",
+  "description": "Private, end-to-end encrypted messaging on Beam's MimbleWimble blockchain. By PriviMW.",
+  "url": "localapp/app/index.html",
+  "icon": "localapp/app/appicon.svg",
+  "version": "1.0.0",
+  "api_version": "7.3",
+  "min_api_version": "7.3",
+  "guid": "a1f4c82e3b7d9056f2e18c4a0d5b3e71"
+}
