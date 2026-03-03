@@ -51,6 +51,18 @@ struct UserKey {
 };
 
 // ============================================================================
+// Upgradable3 version info
+// ============================================================================
+
+static Upgradable3::Manager::VerInfo GetVerInfo()
+{
+    Upgradable3::Manager::VerInfo vi;
+    vi.m_pSid = PriviMe::s_pSID;
+    vi.m_Versions = sizeof(PriviMe::s_pSID) / sizeof(PriviMe::s_pSID[0]);
+    return vi;
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -116,6 +128,32 @@ BEAM_EXPORT void Method_0()
             {
                 Env::DocGroup grM("explicit_upgrade");
                 Env::DocAddText("cid", "ContractID");
+            }
+            {
+                Env::DocGroup grM("schedule_upgrade");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("hTarget", "Height");
+                Env::DocAddText("bSkipVerifyVer", "uint32");
+                Env::DocAddText("iSender", "uint32");
+                Env::DocAddText("approve_mask", "uint32");
+            }
+            {
+                Env::DocGroup grM("replace_admin");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("iAdmin", "uint32");
+                Env::DocAddText("pk", "PubKey");
+                Env::DocAddText("iSender", "uint32");
+                Env::DocAddText("approve_mask", "uint32");
+            }
+            {
+                Env::DocGroup grM("set_approvers");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("newVal", "uint32");
+                Env::DocAddText("iSender", "uint32");
+                Env::DocAddText("approve_mask", "uint32");
+            }
+            {
+                Env::DocGroup grM("view_contract_info");
             }
         }
         {
@@ -304,6 +342,59 @@ void On_view_contracts(const ContractID& /*cid*/)
 void On_explicit_upgrade(const ContractID& cid)
 {
     Upgradable3::Manager::MultiSigRitual::Perform_ExplicitUpgrade(cid);
+}
+
+// Schedule a contract upgrade (admin only, requires --shader_contract_file)
+void On_schedule_upgrade(const ContractID& cid)
+{
+    Height hTarget = 0;
+    Env::DocGet("hTarget", hTarget);
+    if (!hTarget)
+        return OnError("hTarget required");
+
+    OwnerKey ok;
+    Env::KeyID kid(&ok, sizeof(ok));
+
+    auto vi = GetVerInfo();
+    Upgradable3::Manager::MultiSigRitual::Perform_ScheduleUpgrade(vi, cid, kid, hTarget);
+}
+
+// Replace an admin key (admin only)
+void On_replace_admin(const ContractID& cid)
+{
+    uint32_t iAdmin = 0;
+    PubKey pk;
+    Env::DocGet("iAdmin", iAdmin);
+    Env::DocGet("pk", pk);
+
+    OwnerKey ok;
+    Env::KeyID kid(&ok, sizeof(ok));
+
+    Upgradable3::Manager::MultiSigRitual::Perform_ReplaceAdmin(cid, kid, iAdmin, pk);
+}
+
+// Change minimum number of admin approvers (admin only)
+void On_set_approvers(const ContractID& cid)
+{
+    uint32_t newVal = 0;
+    Env::DocGet("newVal", newVal);
+    if (!newVal)
+        return OnError("newVal required");
+
+    OwnerKey ok;
+    Env::KeyID kid(&ok, sizeof(ok));
+
+    Upgradable3::Manager::MultiSigRitual::Perform_SetApprovers(cid, kid, newVal);
+}
+
+// Dump contract info: version, admins, scheduled upgrades (view only)
+void On_view_contract_info(const ContractID& /*cid*/)
+{
+    OwnerKey ok;
+    Env::KeyID kid(&ok, sizeof(ok));
+
+    auto vi = GetVerInfo();
+    vi.DumpAll(&kid);
 }
 
 // ============================================================================
@@ -586,6 +677,10 @@ BEAM_EXPORT void Method_1()
         if (!Env::Strcmp(szAction, "set_config"))       return On_set_config(cid);
         if (!Env::Strcmp(szAction, "view_all"))         return On_view_all(cid);
         if (!Env::Strcmp(szAction, "explicit_upgrade")) return On_explicit_upgrade(cid);
+        if (!Env::Strcmp(szAction, "schedule_upgrade"))   return On_schedule_upgrade(cid);
+        if (!Env::Strcmp(szAction, "replace_admin"))       return On_replace_admin(cid);
+        if (!Env::Strcmp(szAction, "set_approvers"))       return On_set_approvers(cid);
+        if (!Env::Strcmp(szAction, "view_contract_info"))  return On_view_contract_info(cid);
         return OnError("invalid action");
     }
 
