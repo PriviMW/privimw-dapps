@@ -222,18 +222,12 @@ BEAM_EXPORT void Method_5(const PriviMe::Method::ReleaseHandle& r)
 }
 
 // ============================================================================
-// Method 6: Deposit — Owner adds funds (e.g., reserves for future fee changes)
+// Method 6: Deposit — DISABLED (no use case for identity registry)
+// Stub kept for method numbering continuity (BVM expects sequential exports).
 // ============================================================================
-BEAM_EXPORT void Method_6(const PriviMe::Method::Deposit& r)
+BEAM_EXPORT void Method_6(const PriviMe::Method::DepositDisabled&)
 {
-    PriviMe::State& s = PriviMe::GetState();
-    Env::Halt_if(r.m_Amount == 0);
-
-    Env::FundsLock(s.m_AssetId, r.m_Amount);
-    s.m_TotalFees += r.m_Amount;
-    PriviMe::SaveState();
-
-    Env::AddSig(s.m_OwnerPk);
+    Env::Halt(); // permanently disabled
 }
 
 // ============================================================================

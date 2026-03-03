@@ -19,7 +19,7 @@ void OnError(const char* sz)
 
 // Owner key: SID-based so consistent across any future contract redeployment.
 // Seed "privime-owner-ke" (16 bytes of "privime-owner-key").
-// Used for: fee withdrawal (Deposit/Withdraw/SetOwner/SetConfig).
+// Used for: fee withdrawal (Withdraw/SetOwner/SetConfig).
 struct OwnerKey {
     uint8_t  m_pSeed[16]; // "privime-owner-ke"
     ShaderID m_SID;       // First SID ties key to this contract family
@@ -91,11 +91,6 @@ BEAM_EXPORT void Method_0()
             {
                 Env::DocGroup grM("view_pool");
                 Env::DocAddText("cid", "ContractID");
-            }
-            {
-                Env::DocGroup grM("deposit");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("amount", "uint64");
             }
             {
                 Env::DocGroup grM("withdraw");
@@ -197,26 +192,6 @@ void On_view_pool(const ContractID& cid)
     Env::DocAddNum("total_fees", s.m_TotalFees);
     Env::DocAddNum("asset_id", s.m_AssetId);
     Env::DocAddNum("paused", (uint32_t)s.m_Paused);
-}
-
-void On_deposit(const ContractID& cid)
-{
-    PriviMe::Method::Deposit args;
-    Env::DocGet("amount", args.m_Amount);
-
-    PriviMe::State s;
-    if (!ReadState(cid, s)) return;
-
-    FundsChange fc;
-    fc.m_Aid     = s.m_AssetId;
-    fc.m_Amount  = args.m_Amount;
-    fc.m_Consume = 1;
-
-    OwnerKey ok;
-    Env::KeyID kid(&ok, sizeof(ok));
-
-    Env::GenerateKernel(&cid, PriviMe::Method::Deposit::s_iMethod, &args, sizeof(args),
-                        &fc, 1, &kid, 1, "PriviMe: deposit", 75000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -606,7 +581,6 @@ BEAM_EXPORT void Method_1()
         if (!Env::Strcmp(szAction, "create_contract"))  return On_create_contract(cid);
         if (!Env::Strcmp(szAction, "view_contracts"))   return On_view_contracts(cid);
         if (!Env::Strcmp(szAction, "view_pool"))        return On_view_pool(cid);
-        if (!Env::Strcmp(szAction, "deposit"))          return On_deposit(cid);
         if (!Env::Strcmp(szAction, "withdraw"))         return On_withdraw(cid);
         if (!Env::Strcmp(szAction, "set_owner"))        return On_set_owner(cid);
         if (!Env::Strcmp(szAction, "set_config"))       return On_set_config(cid);

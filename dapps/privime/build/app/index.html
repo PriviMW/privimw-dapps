@@ -391,6 +391,40 @@ a { color: inherit; text-decoration: none; }
 .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-align: right; }
 .msg-bubble.received .msg-time { text-align: left; }
 
+.reply-quote {
+    background: rgba(255,255,255,0.06);
+    border-left: 3px solid var(--accent-teal);
+    padding: 4px 8px; border-radius: 4px;
+    font-size: 12px; color: var(--text-muted);
+    margin-bottom: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.msg-bubble.received .reply-quote { border-left-color: var(--accent-blue); }
+
+.reply-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px; flex-shrink: 0;
+}
+.reply-bar-label { color: var(--accent-teal); font-weight: 600; flex-shrink: 0; font-size: 11px; }
+.reply-bar-text  { flex: 1; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-cancel-btn {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); flex-shrink: 0; line-height: 1;
+}
+.reply-cancel-btn:hover { color: var(--text-primary); }
+
+.date-sep {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+}
+.date-sep::before, .date-sep::after { content: ''; flex: 1; height: 1px; background: var(--border-color); }
+
 .chat-empty {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
@@ -660,7 +694,7 @@ a { color: inherit; text-decoration: none; }
         </div>
 
         <!-- Contact list (has handle) -->
-        <div id="homeContacts" style="display:none;flex:1;overflow:hidden;flex-direction:column;display:none;">
+        <div id="homeContacts" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
             <div class="search-bar-wrap">
                 <div class="search-bar">
                     <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
@@ -748,6 +782,11 @@ a { color: inherit; text-decoration: none; }
         </div>
         <div id="chatMessages" class="chat-messages"></div>
         <div class="chat-input-area">
+            <div id="replyBar" style="display:none;" class="reply-bar">
+                <span class="reply-bar-label">↩ Replying to</span>
+                <span id="replyBarText" class="reply-bar-text"></span>
+                <button class="reply-cancel-btn" onclick="cancelReply()">×</button>
+            </div>
             <div class="chat-ttl-warning">⚠ Messages expire after 12 hours if unread</div>
             <div class="chat-input-row">
                 <textarea id="chatInput" class="chat-input" rows="1"
@@ -820,6 +859,27 @@ a { color: inherit; text-decoration: none; }
     </div>
 </div>
 
+<!-- BUBBLE CONTEXT MENU -->
+<div id="bubbleContextMenu" class="context-menu">
+    <div class="context-menu-item" onclick="doCopyBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
+        Copy text
+    </div>
+    <div class="context-menu-item" onclick="doReplyBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        Reply
+    </div>
+    <div class="context-menu-item" onclick="doForwardBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 9H9a5 5 0 00-5 5v2a1 1 0 11-2 0v-2a7 7 0 017-7h5.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        Forward
+    </div>
+    <div class="divider"></div>
+    <div class="context-menu-item danger" onclick="doDeleteBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        Delete
+    </div>
+</div>
+
 <!-- NEW CHAT MODAL -->
 <div id="newChatModal" class="modal-overlay">
     <div class="modal">
@@ -847,7 +907,7 @@ a { color: inherit; text-decoration: none; }
 // ================================================================
 // CONFIG
 // ================================================================
-var PRIVIME_CID = '5af188f81ff22cdd6b44feba0f149514ea2a9e8adcfbfabbb98e2a0bc77f3cb7';
+var PRIVIME_CID = '69a1d79cdddca18e336b2b0c4c14010d243764d3975ad4515862f7a8b5f5122b';
 var GROTH_PER_BEAM = 100000000;
 var MAX_MSG_CHARS  = 950;   // 1024 byte limit with JSON overhead
 var MSG_REFRESH_MS = 2000; // 2s poll for new messages (read_messages is a local wallet call, cheap)
@@ -873,6 +933,7 @@ var myWalletId   = null;   // my own SBBS wallet address (hex string, 66 or 68 c
 // Messaging
 var contacts      = {};    // { walletIdHex: { handle, display_name } }
 var conversations = {};    // { walletIdHex: [{ text, ts, sent }] }
+var deletedConvs  = {};    // { convKey: maxTs } — tombstones so deleted chats don't re-import
 var allMessages   = [];    // raw from read_messages
 var unreadCounts  = {};    // { walletIdHex: count }
 var msgPollTimer  = null;
@@ -881,7 +942,18 @@ var isSubscribed  = false;
 // Lookup debounce
 var handleCheckTimer  = null;
 var newChatCheckTimer = null;
+var searchTimer       = null;
 var newChatResolved   = null; // { handle, wallet_id, display_name } or null
+
+// Bubble context menu
+var chatMsgCache = [];   // mirrors rendered messages for context menu lookup
+var bubbleCtxMsg = null; // message object from right-click
+var bubbleCtxWid = null; // walletId of the chat at right-click time
+
+// Reply / forward state
+var replyTo     = null;  // { text } when replying, null otherwise
+var forwardMode = false;
+var forwardText = null;
 
 // ================================================================
 // WALLET API
@@ -932,6 +1004,10 @@ function handleApiResult(json) {
 }
 
 function onWalletEvent(result) {
+    if (result.ev_system_state) {
+        // System state changed (new block or account switch) — re-check identity
+        checkIdentityChange();
+    }
     if (result.ev_txs_changed) {
         if (myHandle) {
             // Already initialized — new messages only, no need to re-run my_handle
@@ -941,6 +1017,24 @@ function onWalletEvent(result) {
             refreshAll();
         }
     }
+}
+
+// Lightweight identity check — detects wallet switches without full refresh
+function checkIdentityChange() {
+    if (!isConnected || !shaderBytes) return;
+    privimeInvoke('user', 'my_handle', {}, function(result) {
+        if (result && !result.error && result.registered) {
+            var newHandle = result.handle.toLowerCase();
+            if (myHandle && myHandle.handle.toLowerCase() !== newHandle) {
+                // Identity changed (user switched wallet or account) — full re-init
+                applyMyHandle(result);
+            }
+        } else if (result && !result.error && !result.registered && myHandle) {
+            // Handle was released or wallet changed to one without a handle
+            myHandle = null;
+            showHome();
+        }
+    });
 }
 
 // ================================================================
@@ -1017,6 +1111,8 @@ function loadShaderBytes(callback) {
 // ================================================================
 var STORAGE_KEY = 'privime_' + PRIVIME_CID.slice(0, 16);
 var userStorageKey = STORAGE_KEY; // updated to per-handle key once identity is known
+// Bump this when conversation keying logic changes — forces a one-time rebuild from read_messages.
+var CONV_VERSION = 5;
 
 function setUserStorageScope(handle) {
     userStorageKey = STORAGE_KEY + '_' + handle.toLowerCase();
@@ -1026,6 +1122,8 @@ function saveToStorage() {
     try {
         localStorage.setItem(userStorageKey + '_conv', JSON.stringify(conversations));
         localStorage.setItem(userStorageKey + '_contacts', JSON.stringify(contacts));
+        localStorage.setItem(userStorageKey + '_deleted', JSON.stringify(deletedConvs));
+        localStorage.setItem(userStorageKey + '_convver', CONV_VERSION);
         if (myHandle) {
             localStorage.setItem(userStorageKey + '_handle', JSON.stringify(myHandle));
             // Remember last handle for instant startup next time
@@ -1040,10 +1138,22 @@ function loadFromStorage() {
         var lastHandle = localStorage.getItem(STORAGE_KEY + '_lasthandle');
         if (lastHandle) setUserStorageScope(lastHandle);
 
+        // If conversation keying changed (CONV_VERSION bump), discard old conversation
+        // cache so it's rebuilt correctly from read_messages(all=true) on startup.
+        // Contacts, handle info, and tombstones are preserved.
+        var storedVersion = parseInt(localStorage.getItem(userStorageKey + '_convver') || '1');
+        if (storedVersion < CONV_VERSION) {
+            localStorage.removeItem(userStorageKey + '_conv');
+            localStorage.removeItem(userStorageKey + '_contacts'); // clear stale wallet_id mappings
+            localStorage.setItem(userStorageKey + '_convver', CONV_VERSION);
+        }
+
         var saved = localStorage.getItem(userStorageKey + '_conv');
         if (saved) conversations = JSON.parse(saved);
         saved = localStorage.getItem(userStorageKey + '_contacts');
         if (saved) contacts = JSON.parse(saved);
+        saved = localStorage.getItem(userStorageKey + '_deleted');
+        if (saved) try { deletedConvs = JSON.parse(saved); } catch(e) {}
         saved = localStorage.getItem(userStorageKey + '_handle');
         if (saved) {
             var h = JSON.parse(saved);
@@ -1082,8 +1192,9 @@ function refreshAll() {
         if (result && !result.error) {
             applyMyHandle(result);
         } else {
-            // Not registered
+            // Not registered — clear identity so stale data can't leak across wallet instances
             myHandle = null;
+            myWalletId = null;
             showHome();
         }
     });
@@ -1095,14 +1206,22 @@ function applyMyHandle(result) {
         var scopeChanged = !myHandle || myHandle.handle.toLowerCase() !== confirmedHandle;
 
         if (scopeChanged) {
-            // Different wallet than what was cached — switch to the correct handle's storage
+            // Different handle than cached — switch storage scope and apply the same
+            // CONV_VERSION check that loadFromStorage does for the primary scope.
             setUserStorageScope(confirmedHandle);
             conversations = {};
             contacts = {};
-            var saved = localStorage.getItem(userStorageKey + '_conv');
-            if (saved) try { conversations = JSON.parse(saved); } catch(e) {}
-            saved = localStorage.getItem(userStorageKey + '_contacts');
-            if (saved) try { contacts = JSON.parse(saved); } catch(e) {}
+            var sv2 = parseInt(localStorage.getItem(userStorageKey + '_convver') || '1');
+            if (sv2 < CONV_VERSION) {
+                localStorage.removeItem(userStorageKey + '_conv');
+                localStorage.removeItem(userStorageKey + '_contacts');
+                localStorage.setItem(userStorageKey + '_convver', CONV_VERSION);
+            } else {
+                var saved = localStorage.getItem(userStorageKey + '_conv');
+                if (saved) try { conversations = JSON.parse(saved); } catch(e) {}
+                saved = localStorage.getItem(userStorageKey + '_contacts');
+                if (saved) try { contacts = JSON.parse(saved); } catch(e) {}
+            }
         }
 
         myHandle = {
@@ -1114,10 +1233,14 @@ function applyMyHandle(result) {
         myWalletId = normalizeWalletId(result.wallet_id) || result.wallet_id;
         saveToStorage();
         showHome();
-        loadMessages(false);
+        // Use all=true on startup to retrieve any messages that arrived while offline.
+        // read_messages(all=false) only returns messages not yet consumed in this session,
+        // so pending messages from offline periods could be missed without all=true here.
+        loadMessages(true);
         if (!msgPollTimer) startMsgPoll();
     } else {
         myHandle = null;
+        myWalletId = null;
         showHome();
     }
 }
@@ -1153,34 +1276,59 @@ function processMessages(result) {
         var sent = !!(myHandle && payload.from &&
                       payload.from.replace(/^@/, '').toLowerCase() === myHandle.handle.toLowerCase());
 
+        // NOTE: We do NOT filter by payload.to. Each wallet instance has its own SBBS
+        // inbox (one identity per wallet, enforced by the contract's UserKey derivation).
+        // Messages are naturally isolated — no cross-account filtering needed.
+
         // Determine conversation key — always use the registered receive address so
         // incoming and outgoing messages for the same person share ONE conversation.
         var convKey;
         if (sent) {
-            convKey = (m.receiver || m.to || '').trim() || '';
-            if (!convKey) return;
+            // Prefer payload.to (recipient handle) — always correct, set by sender.
+            // Wallet_id reverse lookup is unreliable: multiple handles can share one address.
+            if (payload.to) {
+                convKey = '@' + payload.to.toLowerCase();
+            } else {
+                // Legacy fallback for messages sent before payload.to was added
+                var receiverWid = (m.receiver || m.to || '').trim() || '';
+                if (!receiverWid) return;
+                var foundHandle = findHandleByWalletId(receiverWid);
+                convKey = foundHandle ? '@' + foundHandle : receiverWid;
+            }
         } else if (payload.from) {
             var fromHandle = payload.from.replace(/^@/, '').toLowerCase();
-            if (!contacts[senderWalletId]) contacts[senderWalletId] = {};
-            if (!contacts[senderWalletId].handle) contacts[senderWalletId].handle = fromHandle;
-            // Use the receive address as canonical key if already resolved; otherwise
-            // temporarily use senderKey and merge later when resolve completes.
-            convKey = contacts[senderWalletId].wallet_id || senderWalletId;
-            if (!contacts[senderWalletId].wallet_id) {
-                resolveHandleIntoContact(fromHandle, senderWalletId);
+            // '@handle' is the permanent conversation key. Handles are contract-enforced unique.
+            // wallet_ids are NOT safe to use as keys: multiple handles on the same Beam wallet
+            // instance may register with the same wallet address, causing collisions.
+            var hKey = '@' + fromHandle;
+            if (!contacts[hKey]) contacts[hKey] = { handle: fromHandle };
+            convKey = hKey;
+            if (!contacts[hKey].wallet_id && !contacts[hKey]._resolving) {
+                contacts[hKey]._resolving = true;
+                resolveHandleIntoContact(fromHandle, hKey);
             }
         } else {
             convKey = senderWalletId;
-            resolveWalletIdToContact(senderWalletId);
+            if (!contacts[senderWalletId] || !contacts[senderWalletId]._resolving) {
+                if (!contacts[senderWalletId]) contacts[senderWalletId] = {};
+                contacts[senderWalletId]._resolving = true;
+                resolveWalletIdToContact(senderWalletId);
+            }
         }
         if (!convKey) return;
+
+        // Skip messages that belong to a deleted conversation (tombstone check).
+        // Tombstones are keyed by wallet_id or '@handle' with the max ts at deletion time.
+        // Messages sent AFTER deletion (ts > tombstoneTs) still come through.
+        var tombstoneTs = deletedConvs[convKey];
+        if (tombstoneTs && ts <= tombstoneTs) return;
 
         if (!conversations[convKey]) conversations[convKey] = [];
 
         // Avoid duplicates by ts+text+sent
         var exists = conversations[convKey].some(function(x) { return x.ts === ts && x.text === text && x.sent === sent; });
         if (!exists) {
-            conversations[convKey].push({ text: text, ts: ts, sent: sent });
+            conversations[convKey].push({ text: text, ts: ts, sent: sent, reply: payload.reply || null });
         }
 
         // Track unread (messages not in activeChat that are received)
@@ -1194,7 +1342,10 @@ function processMessages(result) {
         conversations[key].sort(function(a, b) { return a.ts - b.ts; });
     }
 
-    unreadCounts = newUnread;
+    // Merge new unreads into existing counts (don't replace — previous polls' counts must survive)
+    for (var k in newUnread) {
+        unreadCounts[k] = (unreadCounts[k] || 0) + newUnread[k];
+    }
 
     saveToStorage();
 
@@ -1222,6 +1373,7 @@ function resolveWalletIdToContact(walletId) {
     if (contacts[walletId] && contacts[walletId].handle) return;
     var norm = normalizeWalletId(walletId) || walletId;
     privimeInvoke('user', 'resolve_walletid', { walletid: norm }, function(result) {
+        if (contacts[walletId]) contacts[walletId]._resolving = false;
         if (result && !result.error && result.handle) {
             contacts[walletId] = contacts[walletId] || {};
             contacts[walletId].handle = result.handle;
@@ -1232,39 +1384,56 @@ function resolveWalletIdToContact(walletId) {
     });
 }
 
-// Resolve @handle → receive address, populating contacts[convKey].wallet_id for replies.
-// convKey is the raw sender key from read_messages (may be compressed pubkey, not receive addr).
+// Scan '@handle' contacts to find one with a matching wallet_id (for legacy sent messages).
+// Returns null if not found or if multiple handles share the same address (ambiguous).
+function findHandleByWalletId(walletId) {
+    for (var key in contacts) {
+        if (key.charAt(0) === '@' && contacts[key].wallet_id === walletId) {
+            return contacts[key].handle;
+        }
+    }
+    return null;
+}
+
+// Resolve @handle → receive address, populating contacts[convKey].wallet_id for sending.
+// convKey is always '@handle'. The handle stays as the permanent conversation key — we do NOT
+// merge into receiveAddr, because multiple handles can share the same wallet_id on the contract.
 function resolveHandleIntoContact(handle, convKey) {
     privimeInvoke('user', 'resolve_handle', { handle: handle }, function(result) {
+        if (contacts[convKey]) contacts[convKey]._resolving = false;
         if (result && !result.error && result.wallet_id) {
             var receiveAddr = result.wallet_id;
 
-            // Update both keys in contacts
+            // Populate '@handle' contact with wallet_id (needed for sending replies)
             if (!contacts[convKey]) contacts[convKey] = {};
             contacts[convKey].handle = handle;
             contacts[convKey].wallet_id = receiveAddr;
             contacts[convKey].display_name = result.display_name || '';
-            contacts[receiveAddr] = contacts[receiveAddr] || {};
-            contacts[receiveAddr].handle = handle;
-            contacts[receiveAddr].wallet_id = receiveAddr;
-            contacts[receiveAddr].display_name = result.display_name || '';
+            // Do NOT index contacts[receiveAddr] — multiple handles can share the same
+            // wallet_id (accounts on the same Beam wallet). Indexing by wallet_id causes
+            // the last-resolved handle to overwrite all others.
 
-            // Merge split conversations: senderKey bucket → receiveAddr bucket
-            if (convKey !== receiveAddr && conversations[convKey] && conversations[convKey].length > 0) {
-                if (!conversations[receiveAddr]) conversations[receiveAddr] = [];
-                conversations[convKey].forEach(function(msg) {
-                    var dup = conversations[receiveAddr].some(function(x) {
+            // Propagate tombstone from '@handle' to wallet_id (for tombstone checks on sent msgs)
+            if (deletedConvs[convKey] && !deletedConvs[receiveAddr]) {
+                deletedConvs[receiveAddr] = deletedConvs[convKey];
+            }
+
+            // Migrate legacy wallet_id-keyed conversations → '@handle' key.
+            // Old code stored conversations at receiveAddr; new code uses '@handle'.
+            if (receiveAddr !== convKey && conversations[receiveAddr]) {
+                if (!conversations[convKey]) conversations[convKey] = [];
+                conversations[receiveAddr].forEach(function(msg) {
+                    var dup = conversations[convKey].some(function(x) {
                         return x.ts === msg.ts && x.text === msg.text && x.sent === msg.sent;
                     });
-                    if (!dup) conversations[receiveAddr].push(msg);
+                    if (!dup) conversations[convKey].push(msg);
                 });
-                conversations[receiveAddr].sort(function(a, b) { return a.ts - b.ts; });
-                delete conversations[convKey];
-                delete unreadCounts[convKey];
-                // Redirect active chat if user was viewing the old senderKey chat
-                if (activeChat === convKey) {
-                    activeChat = receiveAddr;
-                    unreadCounts[receiveAddr] = 0;
+                conversations[convKey].sort(function(a, b) { return a.ts - b.ts; });
+                delete conversations[receiveAddr];
+                delete unreadCounts[receiveAddr];
+                if (activeChat === receiveAddr) {
+                    activeChat = convKey;
+                    unreadCounts[convKey] = 0;
                 }
             }
 
@@ -1281,7 +1450,8 @@ function resolveHandleToContact(handle, callback) {
     privimeInvoke('user', 'resolve_handle', { handle: handle.toLowerCase() }, function(result) {
         if (result && !result.error && result.wallet_id) {
             var wid = result.wallet_id;
-            contacts[wid] = { handle: handle.toLowerCase(), display_name: result.display_name || '' };
+            var hKey = '@' + handle.toLowerCase();
+            contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: result.display_name || '' };
             callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: result.display_name || '', registered_height: result.registered_height });
         } else {
             callback(result && result.error ? extractError(result) : 'Not found');
@@ -1295,7 +1465,7 @@ function resolveHandleToContact(handle, callback) {
 function subscribeToEvents() {
     if (isSubscribed) return;
     isSubscribed = true;
-    callApi('ev_subunsub', { ev_txs_changed: true }, function() {});
+    callApi('ev_subunsub', { ev_txs_changed: true, ev_system_state: true }, function() {});
 }
 
 function startMsgPoll() {
@@ -1323,11 +1493,25 @@ function showRegisterPage() {
     showPage('registerPage');
 }
 
-function showChatPage(walletId) {
-    activeChat = walletId;
-    unreadCounts[walletId] = 0;
-    var contact = contacts[walletId] || {};
-    var handle  = contact.handle || shortWalletId(walletId);
+function showChatPage(id) {
+    // Normalize wallet_id → '@handle' — '@handle' is the permanent conversation key.
+    // Search results and profile "send message" pass a wallet_id; convert to '@handle' here.
+    var key = id;
+    if (key && !key.startsWith('@')) {
+        var c = contacts[key];
+        if (c && c.handle) {
+            key = '@' + c.handle;
+            // Ensure the '@handle' contact entry exists with wallet_id for sending
+            if (!contacts[key]) contacts[key] = {};
+            contacts[key].handle = c.handle;
+            contacts[key].wallet_id = c.wallet_id || id;
+            contacts[key].display_name = c.display_name || '';
+        }
+    }
+    activeChat = key;
+    unreadCounts[key] = 0;
+    var contact = contacts[key] || {};
+    var handle  = contact.handle || (key.startsWith('@') ? key.slice(1) : shortWalletId(key));
     var name    = contact.display_name || '';
 
     document.getElementById('chatAvatarLg').textContent = handle.charAt(0).toUpperCase();
@@ -1335,32 +1519,33 @@ function showChatPage(walletId) {
     document.getElementById('chatHeaderName').textContent = name;
 
     showPage('chatPage');
-    renderChatMessages(walletId);
+    renderChatMessages(key);
     startMsgPoll();
     document.getElementById('chatInput').focus();
 }
 
-function showContactProfile(walletId) {
+function showContactProfile(id) {
     profileFrom = currentPage;
-    var contact = contacts[walletId] || {};
-    var handle  = contact.handle || shortWalletId(walletId);
+    var contact = contacts[id] || {};
+    var handle  = contact.handle || (id.startsWith('@') ? id.slice(1) : shortWalletId(id));
     var name    = contact.display_name || '';
+    // wallet_id for display and sending — prefer contacts entry, fall back to id if it's a hex
+    var walletId = contact.wallet_id || (id.startsWith('@') ? '' : id);
 
     document.getElementById('profileAvatar').textContent = handle.charAt(0).toUpperCase();
     document.getElementById('profileHandle').textContent = '@' + handle;
     document.getElementById('profileDisplayName').textContent = name;
     document.getElementById('profileHeight').textContent = '';
-    document.getElementById('profileWalletId').textContent = walletId;
-    document.getElementById('profilePage').dataset.walletId = walletId;
+    document.getElementById('profileWalletId').textContent = walletId || id;
+    document.getElementById('profilePage').dataset.walletId = walletId || id;
+    document.getElementById('profilePage').dataset.handle = handle;
 
-    // Try to load registered_height
-    if (contact.handle) {
-        privimeInvoke('user', 'resolve_handle', { handle: contact.handle }, function(r) {
-            if (r && !r.error) {
-                document.getElementById('profileHeight').textContent = 'Registered block #' + r.registered_height;
-            }
-        });
-    }
+    privimeInvoke('user', 'resolve_handle', { handle: handle }, function(r) {
+        if (r && !r.error) {
+            document.getElementById('profileHeight').textContent = 'Registered block #' + r.registered_height;
+            if (r.wallet_id) document.getElementById('profileWalletId').textContent = r.wallet_id;
+        }
+    });
     showPage('profilePage');
 }
 
@@ -1373,8 +1558,13 @@ function profileBack() {
 }
 
 function openChatFromProfile() {
-    var walletId = document.getElementById('profilePage').dataset.walletId;
-    showChatPage(walletId);
+    var handle = document.getElementById('profilePage').dataset.handle;
+    if (handle) {
+        showChatPage('@' + handle);
+    } else {
+        var walletId = document.getElementById('profilePage').dataset.walletId;
+        showChatPage(walletId);
+    }
 }
 
 function copyProfileWalletId() {
@@ -1474,14 +1664,85 @@ function deleteChat() {
     if (!contextMenuTarget) return;
     var wid = contextMenuTarget;
     hideContextMenu();
+    // Tombstone — record max ts so re-imported messages are filtered on next startup
+    var msgs = conversations[wid] || [];
+    var maxTs = msgs.reduce(function(m, x) { return Math.max(m, x.ts); }, 0) || Math.floor(Date.now() / 1000);
+    deletedConvs[wid] = maxTs;
+    var contact = contacts[wid] || {};
+    if (contact.handle) deletedConvs['@' + contact.handle] = maxTs;
     delete conversations[wid];
     delete unreadCounts[wid];
     saveToStorage();
     renderContactList();
 }
 
-document.addEventListener('click', hideContextMenu);
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') hideContextMenu(); });
+document.addEventListener('click', function() { hideContextMenu(); hideBubbleMenu(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') { hideContextMenu(); hideBubbleMenu(); cancelReply(); } });
+
+// ================================================================
+// BUBBLE CONTEXT MENU
+// ================================================================
+function showBubbleMenu(e, idx) {
+    e.preventDefault();
+    e.stopPropagation();
+    hideBubbleMenu();
+    bubbleCtxMsg = chatMsgCache[idx] || null;
+    bubbleCtxWid = activeChat;
+    var menu = document.getElementById('bubbleContextMenu');
+    var x = Math.min(e.clientX, window.innerWidth - 190);
+    var y = Math.min(e.clientY, window.innerHeight - 150);
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+    menu.classList.add('active');
+}
+
+function hideBubbleMenu() {
+    document.getElementById('bubbleContextMenu').classList.remove('active');
+}
+
+function doCopyBubble() {
+    hideBubbleMenu();
+    if (bubbleCtxMsg) copyToClipboard(bubbleCtxMsg.text);
+}
+
+function doReplyBubble() {
+    hideBubbleMenu();
+    if (!bubbleCtxMsg) return;
+    replyTo = { text: bubbleCtxMsg.text };
+    var bar = document.getElementById('replyBar');
+    bar.style.display = 'flex';
+    document.getElementById('replyBarText').textContent = bubbleCtxMsg.text;
+    document.getElementById('chatInput').focus();
+}
+
+function cancelReply() {
+    replyTo = null;
+    var bar = document.getElementById('replyBar');
+    if (bar) bar.style.display = 'none';
+}
+
+function doForwardBubble() {
+    hideBubbleMenu();
+    if (!bubbleCtxMsg) return;
+    forwardText = bubbleCtxMsg.text;
+    forwardMode = true;
+    document.querySelector('#newChatModal .modal-title').textContent = 'Forward to\u2026';
+    document.getElementById('newChatStartBtn').textContent = 'Forward';
+    promptNewChat();
+}
+
+function doDeleteBubble() {
+    hideBubbleMenu();
+    if (!bubbleCtxMsg || !bubbleCtxWid) return;
+    var convs = conversations[bubbleCtxWid];
+    if (!convs) return;
+    var msg = bubbleCtxMsg;
+    conversations[bubbleCtxWid] = convs.filter(function(m) {
+        return !(m.ts === msg.ts && m.text === msg.text && m.sent === msg.sent);
+    });
+    saveToStorage();
+    renderChatMessages(bubbleCtxWid);
+}
 
 // ================================================================
 // CHAT RENDERING
@@ -1490,22 +1751,39 @@ function renderChatMessages(walletId) {
     var msgs = conversations[walletId] || [];
     var el   = document.getElementById('chatMessages');
 
+    // Only auto-scroll if user is already near the bottom (within 120px)
+    var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+
+    chatMsgCache = msgs;
+
     if (msgs.length === 0) {
         el.innerHTML = '<div class="chat-empty"><div style="font-size:40px;margin-bottom:12px;">💬</div><div>No messages yet.</div><div style="margin-top:6px;font-size:12px;">Messages expire after 12 hours</div></div>';
         return;
     }
 
-    el.innerHTML = msgs.map(function(m) {
+    var html = [];
+    var lastDateStr = '';
+    msgs.forEach(function(m, i) {
         var cls  = m.sent ? 'sent' : 'received';
         var time = formatTime(m.ts);
-        return '<div class="msg-bubble ' + cls + '">' +
-            escHtml(m.text) +
+        var dateStr = formatDateSep(m.ts);
+        if (dateStr !== lastDateStr) {
+            html.push('<div class="date-sep">' + escHtml(dateStr) + '</div>');
+            lastDateStr = dateStr;
+        }
+        var replyHtml = m.reply
+            ? '<div class="reply-quote">' + escHtml(m.reply.substring(0, 80)) + (m.reply.length > 80 ? '\u2026' : '') + '</div>'
+            : '';
+        html.push('<div class="msg-bubble ' + cls + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' +
+            replyHtml + escHtml(m.text) +
             '<div class="msg-time">' + time + '</div>' +
-        '</div>';
-    }).join('');
+        '</div>');
+    });
+    el.innerHTML = html.join('');
 
-    // Scroll to bottom
-    el.scrollTop = el.scrollHeight;
+    if (wasAtBottom) {
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 // ================================================================
@@ -1561,19 +1839,44 @@ function doSendMessage() {
 
     var msgObj = { v: 1, t: 'dm', msg: text, ts: Math.floor(Date.now() / 1000) };
     if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+    // Include recipient handle so multi-account wallets filter by intended recipient
+    var recipientHandle = activeChat.startsWith('@') ? activeChat.slice(1)
+                        : (contacts[activeChat] && contacts[activeChat].handle);
+    if (recipientHandle) msgObj.to = recipientHandle;
+    if (replyTo) msgObj.reply = replyTo.text;
 
     // Instant UI — show bubble and clear input immediately before API call
     var convKey = activeChat;
     if (!conversations[convKey]) conversations[convKey] = [];
-    conversations[convKey].push({ text: text, ts: msgObj.ts, sent: true });
+    var replySnapshot = replyTo ? replyTo.text : null;
+    cancelReply(); // clears replyTo + hides reply bar
+    conversations[convKey].push({ text: text, ts: msgObj.ts, sent: true, reply: replySnapshot });
     saveToStorage();
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('charCount').textContent = '';
     renderChatMessages(convKey);
 
-    // Use registered receive address if available (needed when activeChat is a raw sender key)
-    var receiver = (contacts[activeChat] && contacts[activeChat].wallet_id) || activeChat;
+    // Use registered receive address. Must be a valid hex wallet_id (not '@handle' string).
+    var receiver = contacts[activeChat] && contacts[activeChat].wallet_id;
+    if (!receiver || !isValidWalletId(receiver)) {
+        // wallet_id not yet resolved — async resolveHandleIntoContact hasn't completed
+        btn.disabled = false;
+        conversations[convKey] = conversations[convKey].filter(function(m) {
+            return !(m.sent && m.ts === msgObj.ts && m.text === text);
+        });
+        saveToStorage();
+        renderChatMessages(convKey);
+        showToast('Resolving address... try again in a moment', 'warning');
+        // Trigger resolve if not already in progress
+        var h = activeChat.startsWith('@') ? activeChat.slice(1) : null;
+        if (h && (!contacts[activeChat] || !contacts[activeChat]._resolving)) {
+            if (!contacts[activeChat]) contacts[activeChat] = { handle: h };
+            contacts[activeChat]._resolving = true;
+            resolveHandleIntoContact(h, activeChat);
+        }
+        return;
+    }
 
     sendSbbsMessage(receiver, msgObj, function(result) {
         btn.disabled = false;
@@ -1700,25 +2003,16 @@ function updateRegisterBtn() {
 }
 
 function tryAutoFillWalletId() {
-    // Use cached wallet address if available (from a previous read_messages call)
-    if (myWalletId) {
-        var norm = normalizeWalletId(myWalletId);
-        if (norm) {
-            document.getElementById('walletIdInput').value = norm;
-            onWalletIdInput();
-            showToast('Address auto-filled', 'success');
-            return;
-        }
-    }
-
-    // create_address is APPS_ALLOWED — creates a never-expiring SBBS address
+    // ALWAYS call create_address to generate a fresh address for THIS wallet instance.
+    // Never reuse myWalletId — it may be stale from a different wallet's session
+    // (localStorage is shared across wallet instances in the same Beam Desktop app).
     callApi('create_address', { type: 'regular', expiration: 'never' }, function(result) {
         var addr = typeof result === 'string' ? result : (result && (result.address || result.result || ''));
         var normalized = addr ? normalizeWalletId(addr) : null;
         if (normalized) {
             document.getElementById('walletIdInput').value = normalized;
             onWalletIdInput();
-            showToast('Address created and filled', 'success');
+            showToast('Address created for this wallet', 'success');
             return;
         }
         showToast('Auto-fill unavailable — paste your address from the wallet Receive tab', 'warning');
@@ -1751,9 +2045,10 @@ function doRegisterHandle() {
                 return;
             }
             showToast('@' + handle + ' registered!', 'success');
-            // Refresh identity (walletId already normalized to 68 chars)
-            myWalletId = walletId;
-            refreshAll();
+            // Apply identity immediately from form data — TX is submitted but not yet confirmed.
+            // Chain confirmation arrives later via ev_txs_changed; myHandle is already set at
+            // that point so only loadMessages() fires, not a full re-query of the contract.
+            applyMyHandle({ registered: 1, handle: handle, wallet_id: walletId, display_name: displayName || '' });
         }
     );
 }
@@ -1774,6 +2069,12 @@ function promptNewChat() {
 
 function closeNewChatModal() {
     document.getElementById('newChatModal').classList.remove('active');
+    if (forwardMode) {
+        forwardMode = false;
+        forwardText = null;
+        document.querySelector('#newChatModal .modal-title').textContent = 'Start new conversation';
+        document.getElementById('newChatStartBtn').textContent = 'Start chat';
+    }
 }
 
 function onNewChatInput(val) {
@@ -1816,8 +2117,14 @@ function onNewChatInput(val) {
 
 function startNewChat() {
     if (!newChatResolved) return;
+    var target = newChatResolved;
     closeNewChatModal();
-    showChatPage(newChatResolved.wallet_id);
+    showChatPage('@' + target.handle);
+    if (forwardMode && forwardText) {
+        var input = document.getElementById('chatInput');
+        input.value = forwardText;
+        onChatInput();
+    }
 }
 
 // ================================================================
@@ -1833,19 +2140,24 @@ function onSearchInput(val) {
         return;
     }
 
+    var q = val.trim().replace(/^@/, '').toLowerCase();
+    if (!q) return;
+
     results.style.display = '';
     list.style.display = 'none';
     results.innerHTML = '<div style="padding:12px 16px;font-size:13px;color:var(--text-muted);">Searching...</div>';
 
-    var q = val.trim().replace(/^@/, '').toLowerCase();
     privimeInvoke('user', 'resolve_handle', { handle: q }, function(result) {
         if (val !== document.getElementById('searchInput').value) return; // stale
         if (result && !result.error && result.wallet_id) {
-            var wid = result.wallet_id;
-            contacts[wid] = contacts[wid] || { handle: q, display_name: result.display_name || '' };
+            var hKey = '@' + q;
+            contacts[hKey] = contacts[hKey] || {};
+            contacts[hKey].handle = q;
+            contacts[hKey].wallet_id = result.wallet_id;
+            contacts[hKey].display_name = result.display_name || '';
             var initial = q.charAt(0).toUpperCase();
             results.innerHTML =
-                '<div class="search-result-item" onclick="showChatPage(\'' + wid + '\')">' +
+                '<div class="search-result-item" onclick="showChatPage(\'' + hKey + '\')">' +
                 '<div class="contact-avatar" style="width:40px;height:40px;font-size:16px;">' + initial + '</div>' +
                 '<div><div class="search-result-name">@' + escHtml(q) + '</div>' +
                 '<div class="search-result-sub">' + escHtml(result.display_name || '') + '</div></div>' +
@@ -1940,14 +2252,7 @@ function onUpdateWalletIdInput() {
 }
 
 function tryAutoFillUpdateAddr() {
-    if (myWalletId) {
-        var norm = normalizeWalletId(myWalletId);
-        if (norm) {
-            document.getElementById('updateWalletIdInput').value = norm;
-            onUpdateWalletIdInput();
-            return;
-        }
-    }
+    // Always generate a fresh address for THIS wallet (same rationale as tryAutoFillWalletId)
     callApi('create_address', { type: 'regular', expiration: 'never' }, function(result) {
         var addr = typeof result === 'string' ? result : (result && (result.address || result.result || ''));
         var norm = addr ? normalizeWalletId(addr) : null;
@@ -1998,8 +2303,13 @@ function confirmReleaseHandle() {
                 return;
             }
             showToast('@' + myHandle.handle + ' released', 'success');
+            // Clear persisted handle pointer so next startup doesn't try to load stale data
+            try { localStorage.removeItem(STORAGE_KEY + '_lasthandle'); } catch(e) {}
             myHandle = null;
             myWalletId = null;
+            conversations = {};
+            contacts = {};
+            unreadCounts = {};
             showHome();
         }
     );
@@ -2043,6 +2353,20 @@ function formatTime(ts) {
     if (!ts) return '';
     var d = new Date(ts * 1000);
     return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+}
+
+function formatDateSep(ts) {
+    if (!ts) return '';
+    var now = new Date(), d = new Date(ts * 1000);
+    var today  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var diff   = Math.round((today - msgDay) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return d.toLocaleDateString(undefined, {
+        month: 'short', day: 'numeric',
+        year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
 }
 
 function copyToClipboard(text) {
