@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PriviMe</title>
+    <link rel="icon" href="data:,">
+    <style>
+/* {{CSS}} */
+    </style>
+</head>
+<body>
+
+<!-- ==================== STRUCTURE ==================== -->
+<div class="app-container">
+
+    <!-- SPLASH PAGE -->
+    <div id="splashPage" class="page active">
+        <div class="splash-logo">
+            <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="6" width="60" height="60" rx="16" fill="#151d2e" stroke="#25c2a0" stroke-width="1.5"/>
+                <rect x="16" y="22" width="40" height="7" rx="3.5" fill="#25c2a0" opacity="0.8"/>
+                <rect x="16" y="33" width="28" height="7" rx="3.5" fill="#448aff" opacity="0.7"/>
+                <rect x="16" y="44" width="34" height="7" rx="3.5" fill="#25c2a0" opacity="0.5"/>
+            </svg>
+            <div class="splash-title">PriviMe</div>
+            <div class="splash-subtitle">Private messaging on Beam</div>
+        </div>
+        <div id="splashStatus" class="splash-status">Connecting to wallet...</div>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="homePage" class="page">
+        <!-- Home Header -->
+        <div class="app-header">
+            <div class="header-logo">
+                <svg viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="7" fill="#151d2e" stroke="#25c2a0" stroke-width="1.2"/><rect x="6" y="8" width="16" height="3" rx="1.5" fill="#25c2a0" opacity="0.8"/><rect x="6" y="13" width="11" height="3" rx="1.5" fill="#448aff" opacity="0.7"/><rect x="6" y="18" width="13" height="3" rx="1.5" fill="#25c2a0" opacity="0.5"/></svg>
+                <div>
+                    <div class="header-title">PriviMe</div>
+                    <div id="homeHandleLabel" class="header-handle"></div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="statusDot" class="status-dot"></div>
+                <div class="icon-btn" onclick="showMyProfile()" title="My profile">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hero (no handle) -->
+        <div id="homeHero" class="hero-section" style="display:none;">
+            <svg class="hero-icon" viewBox="0 0 80 80" fill="none">
+                <circle cx="40" cy="40" r="38" fill="#151d2e" stroke="#25c2a0" stroke-width="1.5"/>
+                <path d="M20 28h40a3 3 0 013 3v20a3 3 0 01-3 3H25l-8 7v-30a3 3 0 013-3z" fill="#1f2937" stroke="#25c2a0" stroke-width="1.5"/>
+                <rect x="28" y="37" width="24" height="3" rx="1.5" fill="#25c2a0" opacity="0.7"/>
+                <rect x="28" y="43" width="16" height="3" rx="1.5" fill="#448aff" opacity="0.6"/>
+            </svg>
+            <div class="hero-title">Message anyone on Beam</div>
+            <div class="hero-sub">Claim your @handle once. Message by name, not by address.</div>
+            <div class="hero-fee" id="heroFee">Registration fee: 1 BEAM · Permanent</div>
+            <button class="btn btn-primary mt-8" onclick="showRegisterPage()" style="padding:14px 32px;font-size:16px;">
+                Claim your @handle
+            </button>
+        </div>
+
+        <!-- Contact list (has handle) -->
+        <div id="homeContacts" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+            <div class="search-bar-wrap">
+                <div class="search-bar">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+                    <input id="searchInput" type="text" placeholder="Search @handle..." oninput="onSearchInput(this.value)">
+                    <button id="searchClearBtn" class="search-clear-btn" onclick="clearSearch()" style="display:none;"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></button>
+                </div>
+            </div>
+            <div id="searchResults" style="display:none;" class="contact-list"></div>
+            <div id="contactList" class="contact-list"></div>
+        </div>
+
+        <!-- FAB new chat -->
+        <button class="new-chat-btn" onclick="promptNewChat()" title="New conversation">+</button>
+    </div>
+
+    <!-- REGISTER PAGE -->
+    <div id="registerPage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="showHome()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">Claim @handle</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div class="form-section">
+                <!-- Handle -->
+                <div class="form-group">
+                    <label class="form-label">Your @handle</label>
+                    <div id="handleInputWrap" class="form-input-wrap">
+                        <span class="input-prefix">@</span>
+                        <input id="handleInput" class="form-input" type="text" maxlength="32"
+                               placeholder="your_handle"
+                               oninput="onHandleInput(this.value)">
+                    </div>
+                    <div id="handleHint" class="form-hint">3–32 chars · a-z, 0-9, underscore</div>
+                </div>
+
+                <!-- Display name -->
+                <div class="form-group">
+                    <label class="form-label">Display name <span class="text-muted">(optional)</span></label>
+                    <input id="displayNameInput" class="form-input-full" type="text" maxlength="64" placeholder="Your name">
+                </div>
+
+                <!-- Wallet address -->
+                <div class="form-group">
+                    <label class="form-label">Your wallet address</label>
+                    <div class="walletid-auto-wrap">
+                        <input id="walletIdInput" class="form-input-full monospace" type="text"
+                               maxlength="70" placeholder="Paste address from Receive tab (hex)"
+                               oninput="onWalletIdInput()">
+                        <button class="auto-btn" onclick="tryAutoFillWalletId()">Auto-fill</button>
+                    </div>
+                    <div id="walletIdHint" class="form-hint">Use a <strong>permanent (never-expiring)</strong> address — contacts send messages to this address. You can update it later.</div>
+                </div>
+
+                <!-- Fee info -->
+                <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:12px 14px;font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px;">
+                    <div id="regFeeInfo">Registration fee: <strong style="color:var(--text-primary);">1 BEAM</strong> · Non-refundable · Permanent until released</div>
+                    <div style="color:var(--text-muted);font-size:12px;">One @handle per wallet key</div>
+                </div>
+
+                <!-- Submit -->
+                <button id="registerBtn" class="btn btn-primary btn-full" onclick="doRegisterHandle()" disabled>
+                    Register @handle — <span id="regBtnFee">1 BEAM</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHAT PAGE -->
+    <div id="chatPage" class="page">
+        <div class="chat-header" style="position:relative;">
+            <button class="back-btn" onclick="showHome()" style="padding:6px 8px;">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            </button>
+            <div id="chatAvatarLg" class="contact-avatar" style="width:36px;height:36px;font-size:14px;"></div>
+            <div class="chat-header-info">
+                <div id="chatHeaderHandle" class="chat-header-handle"></div>
+                <div id="chatHeaderName" class="chat-header-name"></div>
+            </div>
+            <div class="icon-btn" onclick="toggleChatSearch()" title="Search">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+            </div>
+            <button class="kebab-btn" onclick="toggleKebabMenu(event)" title="More">&#8942;</button>
+            <div id="kebabMenu" class="kebab-menu">
+                <div class="kebab-menu-item" onclick="viewChatProfile()">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clip-rule="evenodd"/></svg>
+                    View profile
+                </div>
+                <div class="kebab-menu-item" onclick="exportChatHistory()">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    Export chat
+                </div>
+                <div class="kebab-menu-item" onclick="toggleBlockUser()">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clip-rule="evenodd"/></svg>
+                    <span id="kebabBlockLabel">Block user</span>
+                </div>
+                <div class="divider"></div>
+                <div class="kebab-menu-item" onclick="clearChatHistory()">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    Clear history
+                </div>
+                <div class="kebab-menu-item danger" onclick="deleteChatFromKebab()">
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                    Delete chat
+                </div>
+            </div>
+        </div>
+        <div id="chatSearchBar" class="chat-search-bar">
+            <input id="chatSearchInput" type="text" placeholder="Search in conversation..."
+                   oninput="onChatSearchInput()" onkeydown="onChatSearchKeydown(event)">
+            <div class="chat-search-nav">
+                <span id="chatSearchCount"></span>
+                <button onclick="chatSearchPrev()" title="Previous">&#9650;</button>
+                <button onclick="chatSearchNext()" title="Next">&#9660;</button>
+            </div>
+            <button class="search-clear-btn" onclick="closeChatSearch()" title="Close">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            </button>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-area">
+            <div id="replyBar" style="display:none;" class="reply-bar">
+                <span class="reply-bar-label">↩ Replying to</span>
+                <span id="replyBarText" class="reply-bar-text"></span>
+                <button class="reply-cancel-btn" onclick="cancelReply()">×</button>
+            </div>
+            <div class="chat-ttl-warning">⚠ Messages expire after 12 hours if unread</div>
+            <div id="slashCmdPopup" class="slash-cmd-popup"></div>
+            <div id="emojiPanel" class="emoji-panel">
+                <div class="emoji-tabs" id="emojiTabs"></div>
+                <div class="emoji-grid" id="emojiGrid"></div>
+            </div>
+            <div class="chat-input-row">
+                <button class="emoji-btn" onclick="toggleEmojiPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+                <button class="slash-btn" onclick="toggleSlashPopup()" title="Commands">/</button>
+                <textarea id="chatInput" class="chat-input" rows="1"
+                    placeholder="Message..."
+                    oninput="onChatInput()"
+                    onkeydown="onChatKeydown(event)"></textarea>
+                <button id="sendBtn" class="send-btn" onclick="doSendMessage()" disabled>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2.94 5.223a1 1 0 011.092-.174l14 7a1 1 0 010 1.788l-14 7A1 1 0 012 19.882V12.5l8-2.5-8-2.5V2.118a1 1 0 01.94-1.118z" fill-rule="evenodd" clip-rule="evenodd"/></svg>
+                </button>
+            </div>
+            <div id="charCount" class="char-count"></div>
+        </div>
+    </div>
+
+    <!-- PROFILE PAGE (contact) -->
+    <div id="profilePage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="profileBack()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">Profile</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div class="profile-hero">
+                <div id="profileAvatar" class="profile-avatar-lg"></div>
+                <div id="profileHandle" class="profile-handle"></div>
+                <div id="profileDisplayName" class="profile-name"></div>
+                <div id="profileHeight" class="profile-height"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                <div class="detail-row">
+                    <span class="detail-label">Wallet Address</span>
+                    <span id="profileWalletId" class="detail-value"></span>
+                    <button class="copy-btn" onclick="copyProfileWalletId()">Copy</button>
+                </div>
+                <button id="profileChatBtn" class="btn btn-primary btn-full" onclick="openChatFromProfile()">
+                    💬 Send message
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MY PROFILE PAGE -->
+    <div id="myProfilePage" class="page">
+        <div class="app-header">
+            <button class="back-btn" onclick="showHome()">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Back
+            </button>
+            <span style="font-weight:700;font-size:16px;">My Profile</span>
+            <div style="width:64px;"></div>
+        </div>
+        <div class="page-scroll">
+            <div id="myProfileContent"></div>
+        </div>
+    </div>
+
+</div><!-- end app-container -->
+
+<!-- TOAST CONTAINER -->
+<div id="toastContainer"></div>
+
+<!-- CONTEXT MENU -->
+<div id="contextMenu" class="context-menu">
+    <div class="context-menu-item danger" onclick="deleteChat()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        Delete chat
+    </div>
+</div>
+
+<!-- BUBBLE CONTEXT MENU -->
+<div id="bubbleContextMenu" class="context-menu">
+    <div class="context-menu-item" onclick="doCopyBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
+        Copy text
+    </div>
+    <div class="context-menu-item" onclick="doReplyBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        Reply
+    </div>
+    <div class="context-menu-item" onclick="doForwardBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 9H9a5 5 0 00-5 5v2a1 1 0 11-2 0v-2a7 7 0 017-7h5.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        Forward
+    </div>
+    <div class="divider"></div>
+    <div class="context-menu-item danger" onclick="doDeleteBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+        Delete
+    </div>
+</div>
+
+<!-- NEW CHAT MODAL -->
+<div id="newChatModal" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-title">Start new conversation</div>
+        <div class="form-group">
+            <label class="form-label">Recipient @handle</label>
+            <div class="form-input-wrap" id="newChatHandleWrap">
+                <span class="input-prefix">@</span>
+                <input id="newChatHandleInput" class="form-input" type="text" maxlength="32"
+                       placeholder="handle" oninput="onNewChatInput(this.value)">
+            </div>
+            <div id="newChatHint" class="form-hint">Enter the @handle of the person you want to message</div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeNewChatModal()">Cancel</button>
+            <button id="newChatStartBtn" class="btn btn-primary" onclick="startNewChat()" disabled>Start chat</button>
+        </div>
+    </div>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div id="confirmModal" class="modal-overlay">
+    <div class="modal">
+        <div id="confirmModalTitle" class="modal-title"></div>
+        <div id="confirmModalBody" class="modal-body"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('confirmModal').classList.remove('active')">Cancel</button>
+            <button id="confirmModalAction" class="btn btn-danger">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- FORWARD MODAL -->
+<div id="forwardModal" class="modal-overlay">
+    <div class="modal" style="max-height:80vh;display:flex;flex-direction:column;">
+        <div class="modal-title">Forward to&hellip;</div>
+        <div class="form-group" style="flex-shrink:0;">
+            <div class="search-bar" style="margin:0;">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+                <input id="forwardSearchInput" type="text" placeholder="Search @handle..." oninput="onForwardSearch(this.value)">
+            </div>
+        </div>
+        <div id="forwardContactList" style="flex:1;overflow-y:auto;min-height:0;margin:0 -24px;"></div>
+        <div style="flex-shrink:0;padding-top:8px;">
+            <button class="btn btn-secondary btn-full" onclick="closeForwardModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== JAVASCRIPT ==================== -->
+<script>
+// {{JS}}
+</script>
+
+</body>
+</html>

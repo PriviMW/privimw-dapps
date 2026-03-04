@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "name": "privime-ui",
+  "scripts": {
+    "build": "node src/build.js --bundle",
+    "build:mainnet": "node src/build.js --bundle --cid=32c6e5836eb5d2d428acce7ca4e262c8bf9f615c142811f7cf4ee4717f8747a9",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "vitest": "^4.0.18"
+  }
+}

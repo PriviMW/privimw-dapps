@@ -4,7 +4,7 @@
 #
 # Prerequisites:
 #   - Shaders compiled (shaders/app.wasm)
-#   - UI updated (ui/index.html has MAINNET PRODUCTION CID)
+#   - Node.js installed (npm run build:mainnet)
 #   - 7-Zip installed at C:\Program Files\7-Zip\7z.exe
 
 set -e
@@ -12,6 +12,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=== PriviMe Mainnet Package Script ==="
+
+# Step 0: Build UI from source with PRODUCTION CID
+echo "Building UI from src/ (mainnet CID) ..."
+npm run build:mainnet
 
 # Step 1: Refresh releases/mainnet/ staging area
 echo "Refreshing releases/mainnet/app/ ..."
