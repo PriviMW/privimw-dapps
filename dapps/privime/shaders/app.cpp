@@ -324,17 +324,22 @@ void On_view_all(const ContractID& cid)
     }
 }
 
-// List all deployed PriviMe contracts (scans by SID)
+// List all deployed PriviMe contracts (scans ALL known SIDs)
 void On_view_contracts(const ContractID& /*cid*/)
 {
     Env::DocArray gr("contracts");
 
-    WalkerContracts wlk;
-    for (wlk.Enum(PriviMe::s_pSID[0]); wlk.MoveNext(); )
+    static const uint32_t nVersions = sizeof(PriviMe::s_pSID) / sizeof(PriviMe::s_pSID[0]);
+    for (uint32_t v = 0; v < nVersions; v++)
     {
-        Env::DocGroup entry("");
-        Env::DocAddBlob_T("cid", wlk.m_Key.m_KeyInContract.m_Cid);
-        Env::DocAddNum("height", wlk.m_Height);
+        WalkerContracts wlk;
+        for (wlk.Enum(PriviMe::s_pSID[v]); wlk.MoveNext(); )
+        {
+            Env::DocGroup entry("");
+            Env::DocAddBlob_T("cid", wlk.m_Key.m_KeyInContract.m_Cid);
+            Env::DocAddNum("height", wlk.m_Height);
+            Env::DocAddNum("version", v);
+        }
     }
 }
 

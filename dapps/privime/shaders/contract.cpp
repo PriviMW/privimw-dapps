@@ -21,7 +21,7 @@ void Upgradable3::OnUpgraded(uint32_t nPrevVersion)
 // Passed as m_PrevVersion to the new contract's OnUpgraded() during upgrade.
 uint32_t Upgradable3::get_CurrentVersion()
 {
-    return 0; // Phase 1a
+    return 1; // v1 — packed Profile/OwnerRecord structs
 }
 
 // ============================================================================

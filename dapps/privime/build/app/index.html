@@ -213,7 +213,7 @@ a { color: inherit; text-decoration: none; }
     color: var(--bg-primary);
 }
 .contact-info { flex: 1; min-width: 0; }
-.contact-name { font-size: 15px; font-weight: 600; truncate; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contact-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contact-preview { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .contact-meta { text-align: right; flex-shrink: 0; }
 .contact-time { font-size: 11px; color: var(--text-muted); }
@@ -1404,9 +1404,16 @@ function processMessages(result) {
         if (!payload) return;
         if (payload.v !== 1) return;
 
+        // Sanitize payload.from — only valid handle chars (a-z, 0-9, underscore).
+        // Prevents XSS via crafted SBBS messages injecting JS into onclick attributes.
+        if (payload.from) {
+            payload.from = payload.from.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+            if (!payload.from) return; // entirely invalid — skip message
+        }
+
         // Handle read receipts (ack messages)
         if (payload.t === 'ack' && payload.read && Array.isArray(payload.read)) {
-            var ackFrom = payload.from ? '@' + payload.from.replace(/^@/, '').toLowerCase() : null;
+            var ackFrom = payload.from ? '@' + payload.from : null;
             if (ackFrom && conversations[ackFrom]) {
                 var changed = false;
                 payload.read.forEach(function(ts) {
@@ -2621,7 +2628,7 @@ function renderMyProfileContent() {
         '<button class="btn btn-secondary btn-full mt-8" onclick="showUpdateAddr()">Update Address</button>' +
         '<div class="form-hint">If your registered address expires, update it here.</div>' +
         '</div>' +
-        '<div id="updateAddrForm" style="display:none;margin-top:12px;display:none;">' +
+        '<div id="updateAddrForm" style="display:none;margin-top:12px;">' +
         '<div class="walletid-auto-wrap" style="margin-bottom:6px;">' +
         '<input id="updateWalletIdInput" class="form-input-full monospace" maxlength="70" placeholder="New wallet address (hex)" oninput="onUpdateWalletIdInput()">' +
         '<button class="auto-btn" onclick="tryAutoFillUpdateAddr()">Auto-fill</button>' +
@@ -2737,7 +2744,9 @@ function doUpdateAddress() {
     btn.disabled = true;
     btn.textContent = 'Preparing...';
 
-    privimeTx('user', 'update_profile', { wallet_id: walletId },
+    var updateExtra = { wallet_id: walletId };
+    if (myHandle && myHandle.display_name) updateExtra.display_name = myHandle.display_name;
+    privimeTx('user', 'update_profile', updateExtra,
         function() { btn.textContent = 'Confirm in wallet...'; },
         function(result) {
             btn.disabled = false;
@@ -2813,7 +2822,8 @@ function escHtml(str) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function formatTs(ts) {
@@ -2847,6 +2857,17 @@ function formatDateSep(ts) {
 }
 
 function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showToast('Copied to clipboard', 'success');
+        }, function() {
+            copyToClipboardFallback(text);
+        });
+    } else {
+        copyToClipboardFallback(text);
+    }
+}
+function copyToClipboardFallback(text) {
     try {
         var ta = document.createElement('textarea');
         ta.value = text;
