@@ -745,7 +745,7 @@ a { color: inherit; text-decoration: none; }
             </svg>
             <div class="hero-title">Message anyone on Beam</div>
             <div class="hero-sub">Claim your @handle once. Message by name, not by address.</div>
-            <div class="hero-fee">Registration fee: 1 BEAM · Permanent</div>
+            <div class="hero-fee" id="heroFee">Registration fee: 1 BEAM · Permanent</div>
             <button class="btn btn-primary mt-8" onclick="showRegisterPage()" style="padding:14px 32px;font-size:16px;">
                 Claim your @handle
             </button>
@@ -812,13 +812,13 @@ a { color: inherit; text-decoration: none; }
 
                 <!-- Fee info -->
                 <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:12px 14px;font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:4px;">
-                    <div>Registration fee: <strong style="color:var(--text-primary);">1 BEAM</strong> · Non-refundable · Permanent until released</div>
+                    <div id="regFeeInfo">Registration fee: <strong style="color:var(--text-primary);">1 BEAM</strong> · Non-refundable · Permanent until released</div>
                     <div style="color:var(--text-muted);font-size:12px;">One @handle per wallet key</div>
                 </div>
 
                 <!-- Submit -->
                 <button id="registerBtn" class="btn btn-primary btn-full" onclick="doRegisterHandle()" disabled>
-                    Register @handle — 1 BEAM
+                    Register @handle — <span id="regBtnFee">1 BEAM</span>
                 </button>
             </div>
         </div>
@@ -1031,6 +1031,9 @@ var allMessages   = [];    // raw from read_messages
 var unreadCounts  = {};    // { walletIdHex: count }
 var msgPollTimer  = null;
 var isSubscribed  = false;
+
+// Contract params
+var registrationFee = 1; // BEAM, updated from view_pool
 
 // Lookup debounce
 var handleCheckTimer  = null;
@@ -1338,6 +1341,13 @@ function onWalletConnected() {
 
 function refreshAll() {
     if (!isConnected || !shaderBytes) return;
+    // Fetch registration fee from contract
+    privimeInvoke('manager', 'view_pool', {}, function(r) {
+        if (r && r.pool && r.pool.registration_fee) {
+            registrationFee = parseFloat((r.pool.registration_fee / GROTH_PER_BEAM).toFixed(8));
+            updateFeeDisplay();
+        }
+    });
     privimeInvoke('user', 'my_handle', {}, function(result) {
         if (result && !result.error) {
             applyMyHandle(result);
@@ -2426,7 +2436,7 @@ function doRegisterHandle() {
         function() { btn.textContent = 'Confirm in wallet...'; },
         function(result) {
             btn.disabled = false;
-            btn.textContent = 'Register @handle — 1 BEAM';
+            btn.innerHTML = 'Register @handle — <span id="regBtnFee">' + formatFee() + '</span>';
             if (result && result.error) {
                 showToast('Registration failed: ' + extractError(result), 'error');
                 return;
@@ -2894,6 +2904,22 @@ function copyToClipboardFallback(text) {
     } catch (e) {
         showToast('Copy failed', 'error');
     }
+}
+
+function formatFee() {
+    var f = registrationFee;
+    return (f % 1 === 0 ? f.toFixed(0) : f.toFixed(2)) + ' BEAM';
+}
+
+function updateFeeDisplay() {
+    var fee = formatFee();
+    var el;
+    el = document.getElementById('heroFee');
+    if (el) el.textContent = 'Registration fee: ' + fee + ' · Permanent';
+    el = document.getElementById('regFeeInfo');
+    if (el) el.innerHTML = 'Registration fee: <strong style="color:var(--text-primary);">' + fee + '</strong> · Non-refundable · Permanent until released';
+    el = document.getElementById('regBtnFee');
+    if (el) el.textContent = fee;
 }
 
 function showToast(msg, type) {
