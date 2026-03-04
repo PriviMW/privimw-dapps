@@ -21,7 +21,7 @@ void Upgradable3::OnUpgraded(uint32_t nPrevVersion)
 // Passed as m_PrevVersion to the new contract's OnUpgraded() during upgrade.
 uint32_t Upgradable3::get_CurrentVersion()
 {
-    return 1; // v1 — packed Profile/OwnerRecord structs
+    return 2; // v2 — build variant + m_BuildVariant in State
 }
 
 // ============================================================================
@@ -87,6 +87,7 @@ BEAM_EXPORT void Ctor(const PriviMe::Method::Ctor& r)
     _POD_(PriviMe::g_State).SetZero();
     _POD_(PriviMe::g_State.m_OwnerPk) = r.m_OwnerPk;
     PriviMe::g_State.m_RegistrationFee = PriviMe::s_DefaultFee;
+    PriviMe::g_State.m_BuildVariant = PriviMe::s_BuildVariant;
     PriviMe::g_State.m_AssetId = 0; // BEAM
     PriviMe::g_State.m_Initialized = 1;
     PriviMe::SaveState();

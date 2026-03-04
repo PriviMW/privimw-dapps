@@ -1000,7 +1000,7 @@ a { color: inherit; text-decoration: none; }
 // ================================================================
 // CONFIG
 // ================================================================
-var PRIVIME_CID = '69a1d79cdddca18e336b2b0c4c14010d243764d3975ad4515862f7a8b5f5122b';
+var PRIVIME_CID = '97db059a347227d2d71fd0cb7fb5d993343ab1540d2eaf40fe48d131b611635f';
 var GROTH_PER_BEAM = 100000000;
 var MAX_MSG_CHARS  = 950;   // 1024 byte limit with JSON overhead
 var MSG_REFRESH_MS = 2000; // 2s poll for new messages (read_messages is a local wallet call, cheap)
@@ -1249,6 +1249,17 @@ var userStorageKey = STORAGE_KEY; // updated to per-handle key once identity is 
 // Bump this when conversation keying logic changes — forces a one-time rebuild from read_messages.
 var CONV_VERSION = 5;
 
+// Contract start timestamp — filters out SBBS messages from previous contract instances.
+// Set once on first run with a new CID (STORAGE_KEY changes when CID changes).
+var contractStartTs = (function() {
+    var key = STORAGE_KEY + '_startts';
+    var stored = localStorage.getItem(key);
+    if (stored) return parseInt(stored);
+    var now = Math.floor(Date.now() / 1000);
+    localStorage.setItem(key, now);
+    return now;
+})();
+
 function setUserStorageScope(handle) {
     userStorageKey = STORAGE_KEY + '_' + handle.toLowerCase();
 }
@@ -1403,6 +1414,9 @@ function processMessages(result) {
         var payload = getMessagePayload(m);
         if (!payload) return;
         if (payload.v !== 1) return;
+
+        // Skip messages from before this contract instance was first opened
+        if (payload.ts && payload.ts < contractStartTs) return;
 
         // Sanitize payload.from — only valid handle chars (a-z, 0-9, underscore).
         // Prevents XSS via crafted SBBS messages injecting JS into onclick attributes.
