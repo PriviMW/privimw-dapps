@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head><title>PriviMW Logo Export</title></head>
+<body style="background:#222;color:#fff;font-family:sans-serif;text-align:center;padding:40px">
+<h2>PriviMW Logo Export</h2>
+<div id="preview" style="margin:20px auto"></div>
+<div style="margin:20px">
+  <button onclick="download(512)">Download 512x512 PNG</button>
+  <button onclick="download(1024)">Download 1024x1024 PNG</button>
+</div>
+<script>
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#25c2a0"/>
+      <stop offset="100%" stop-color="#448aff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="48" fill="url(#bg)" stroke="url(#shield)" stroke-width="1.5"/>
+  <path d="M50 20L76 32V50C76 64 65 76 50 80C35 76 24 64 24 50V32Z" fill="url(#shield)" fill-opacity="0.15" stroke="url(#shield)" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M32 44Q41 36 50 44T68 44" fill="none" stroke="url(#shield)" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 54Q41 46 50 54T68 54" fill="none" stroke="url(#shield)" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M34 63Q42 56 50 63T66 63" fill="none" stroke="url(#shield)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+</svg>`;
+
+// Show preview
+const blob = new Blob([svg], {type:'image/svg+xml'});
+const url = URL.createObjectURL(blob);
+const img = new Image();
+img.src = url;
+img.style.width = '256px';
+img.style.height = '256px';
+document.getElementById('preview').appendChild(img);
+
+function download(size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const i = new Image();
+  i.onload = () => {
+    ctx.drawImage(i, 0, 0, size, size);
+    const a = document.createElement('a');
+    a.download = `privimw-logo-${size}.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+  i.src = url;
+}
+</script>
+</body>
+</html>

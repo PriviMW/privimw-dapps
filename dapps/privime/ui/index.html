@@ -404,6 +404,18 @@ a { color: inherit; text-decoration: none; }
 }
 .msg-bubble.received .reply-quote { border-left-color: var(--accent-blue); }
 
+.msg-bubble.tip.sent {
+    background: linear-gradient(135deg, #1a3a4a, #1a4a3a);
+    border: 1px solid var(--accent-teal);
+}
+.msg-bubble.tip.received {
+    background: linear-gradient(135deg, #1a2a3a, #1a3a4a);
+    border: 1px solid var(--accent-blue);
+}
+.tip-bubble-inner { display: flex; align-items: center; gap: 4px; font-weight: 600; }
+.tip-icon { font-size: 14px; }
+.tip-amount { color: var(--accent-teal); font-weight: 700; font-family: 'SF Mono', 'Fira Code', monospace; }
+
 .reply-bar {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 12px;
@@ -1341,6 +1353,17 @@ function sendSbbsMessage(toWalletId, msgObj, callback) {
     callApi('send_message', { receiver: toWalletId, message: msgObj }, callback);
 }
 
+// SBBS is best-effort — retry important messages to improve delivery reliability.
+// Recipient-side dedup (ts+text+sent) prevents duplicates.
+function sendSbbsWithRetry(toWalletId, msgObj, retries) {
+    sendSbbsMessage(toWalletId, msgObj, function() {});
+    for (var i = 1; i <= (retries || 2); i++) {
+        (function(delay) {
+            setTimeout(function() { sendSbbsMessage(toWalletId, msgObj, function() {}); }, delay);
+        })(i * 5000);
+    }
+}
+
 function readMessages(fetchAll, callback) {
     callApi('read_messages', { all: fetchAll ? true : false }, callback);
 }
@@ -1616,7 +1639,7 @@ function processMessages(result) {
             return;
         }
 
-        if (payload.t !== 'dm') return;
+        if (payload.t !== 'dm' && payload.t !== 'tip') return;
 
         // Skip messages from blocked users
         if (payload.from && isBlocked(payload.from.replace(/^@/, '').toLowerCase())) return;
@@ -1688,7 +1711,12 @@ function processMessages(result) {
         // Avoid duplicates by ts+text+sent
         var exists = conversations[convKey].some(function(x) { return x.ts === ts && x.text === text && x.sent === sent; });
         if (!exists) {
-            conversations[convKey].push({ text: text, ts: ts, sent: sent, reply: payload.reply || null });
+            var msgData = { text: text, ts: ts, sent: sent, reply: payload.reply || null };
+            if (payload.t === 'tip') {
+                msgData.isTip = true;
+                msgData.tipAmount = payload.amount || 0;
+            }
+            conversations[convKey].push(msgData);
             // Only count as unread if this is a genuinely new message (not a re-processed one)
             if (!sent && convKey !== activeChat) {
                 newUnread[convKey] = (newUnread[convKey] || 0) + 1;
@@ -1892,10 +1920,16 @@ function showChatPage(id) {
     closeSlashPopup();
 
     showPage('chatPage');
-    renderChatMessages(key);
+    renderChatMessages(key, true);
     startMsgPoll();
     document.getElementById('chatInput').focus();
     sendReadReceipts(key);
+
+    // Always re-resolve handle → wallet_id from contract to catch address updates
+    if (key.startsWith('@')) {
+        var h = key.slice(1);
+        resolveHandleIntoContact(h, key);
+    }
 }
 
 function showContactProfile(id) {
@@ -2238,6 +2272,8 @@ function doForwardTo(wid) {
             showToast('Forward failed: ' + extractError(result), 'error');
         } else {
             showToast('Message forwarded', 'success');
+            setTimeout(function() { sendSbbsMessage(receiver, msgObj, function() {}); }, 5000);
+            setTimeout(function() { sendSbbsMessage(receiver, msgObj, function() {}); }, 10000);
         }
     });
 }
@@ -2599,7 +2635,7 @@ var slashSelectedIdx = 0;
 
 var SLASH_COMMANDS = [
     { name: '/rename', desc: 'Change your display name', enabled: true },
-    { name: '/tip', desc: 'Send BEAM to this user (coming soon)', enabled: false }
+    { name: '/tip', desc: 'Send BEAM to this user', enabled: true }
 ];
 
 function toggleSlashPopup() {
@@ -2663,7 +2699,39 @@ function handleSlashCommand(text) {
     }
 
     if (cmd === '/tip') {
-        showToast('/tip is coming soon', 'info');
+        var amountStr = text.substring(parts[0].length).trim();
+        if (!amountStr) {
+            showToast('Usage: /tip <amount>  (e.g. /tip 5)', 'warning');
+            return true;
+        }
+        var tipAmt = parseFloat(amountStr);
+        if (isNaN(tipAmt) || tipAmt <= 0) {
+            showToast('Invalid amount. Usage: /tip 5', 'warning');
+            return true;
+        }
+        if (tipAmt < 0.001) {
+            showToast('Minimum tip is 0.001 BEAM', 'warning');
+            return true;
+        }
+        if (!myHandle) {
+            showToast('Register a @handle first', 'warning');
+            return true;
+        }
+        if (!activeChat || !activeChat.startsWith('@')) {
+            showToast('Open a chat with a @handle user first', 'warning');
+            return true;
+        }
+        var recipientHandle = activeChat.slice(1);
+        if (myHandle.handle.toLowerCase() === recipientHandle.toLowerCase()) {
+            showToast('You cannot tip yourself', 'warning');
+            return true;
+        }
+        var recipientContact = contacts[activeChat];
+        if (!recipientContact || !recipientContact.wallet_id || !isValidWalletId(recipientContact.wallet_id)) {
+            showToast('Recipient address not resolved yet. Try again in a moment.', 'warning');
+            return true;
+        }
+        doSlashTip(tipAmt, recipientHandle, recipientContact.wallet_id);
         return true;
     }
 
@@ -2689,15 +2757,54 @@ function doSlashRename(newName) {
     );
 }
 
+function doSlashTip(beamAmount, recipientHandle, recipientWalletId) {
+    var groth = Math.round(beamAmount * GROTH_PER_BEAM);
+    showToast('Sending ' + beamAmount + ' BEAM to @' + recipientHandle + '...', 'info');
+
+    callApi('tx_send', { value: groth, address: recipientWalletId, asset_id: 0 }, function(result) {
+        if (result && result.error) {
+            showToast('Tip failed: ' + (result.error.message || result.error), 'error');
+            return;
+        }
+        showToast('Tip sent! ' + beamAmount + ' BEAM to @' + recipientHandle, 'success');
+
+        // Send SBBS notification so recipient sees the tip in chat
+        var tipMsg = {
+            v: 1,
+            t: 'tip',
+            msg: 'Sent you ' + beamAmount + ' BEAM',
+            ts: Math.floor(Date.now() / 1000),
+            amount: groth,
+            from: myHandle.handle,
+            dn: myHandle.display_name || '',
+            to: recipientHandle
+        };
+        sendSbbsWithRetry(recipientWalletId, tipMsg, 2);
+
+        // Add to local conversation
+        var convKey = '@' + recipientHandle;
+        if (!conversations[convKey]) conversations[convKey] = [];
+        conversations[convKey].push({
+            text: 'Sent ' + beamAmount + ' BEAM',
+            ts: tipMsg.ts,
+            sent: true,
+            isTip: true,
+            tipAmount: groth
+        });
+        saveToStorage();
+        renderChatMessages(convKey);
+    });
+}
+
 // ================================================================
 // CHAT RENDERING
 // ================================================================
-function renderChatMessages(walletId) {
+function renderChatMessages(walletId, forceScroll) {
     var msgs = conversations[walletId] || [];
     var el   = document.getElementById('chatMessages');
 
-    // Only auto-scroll if user is already near the bottom (within 120px)
-    var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    // Only auto-scroll if user is already near the bottom (within 120px), or forced
+    var wasAtBottom = forceScroll || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
 
     chatMsgCache = msgs;
 
@@ -2725,8 +2832,19 @@ function renderChatMessages(walletId) {
                 ? ' <span class="msg-tick read">✓✓</span>'
                 : ' <span class="msg-tick">✓</span>';
         }
-        html.push('<div class="msg-bubble ' + cls + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' +
-            replyHtml + escHtml(m.text) +
+        var bubbleContent;
+        if (m.isTip) {
+            var tipBeam = m.tipAmount ? (m.tipAmount / GROTH_PER_BEAM).toFixed(8).replace(/\.?0+$/, '') : '?';
+            var tipVerb = m.sent ? 'Sent' : 'Received';
+            bubbleContent = '<div class="tip-bubble-inner">' +
+                '<span class="tip-icon">💎</span> ' +
+                tipVerb + '&nbsp; <span class="tip-amount">' + tipBeam + ' BEAM</span>' +
+                '</div>';
+        } else {
+            bubbleContent = replyHtml + escHtml(m.text);
+        }
+        html.push('<div class="msg-bubble ' + cls + (m.isTip ? ' tip' : '') + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' +
+            bubbleContent +
             '<div class="msg-time">' + time + tickHtml + '</div>' +
         '</div>');
     });
@@ -2883,6 +3001,10 @@ function doSendMessage() {
             saveToStorage();
             renderChatMessages(convKey);
             showToast('Send failed: ' + extractError(result), 'error');
+        } else {
+            // SBBS is best-effort — retry in background for reliability
+            setTimeout(function() { sendSbbsMessage(receiver, msgObj, function() {}); }, 5000);
+            setTimeout(function() { sendSbbsMessage(receiver, msgObj, function() {}); }, 10000);
         }
     });
 }
