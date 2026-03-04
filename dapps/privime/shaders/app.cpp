@@ -185,6 +185,11 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("handle", "string");
             }
             {
+                Env::DocGroup grM("search_handles");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("prefix", "string");
+            }
+            {
                 Env::DocGroup grM("resolve_walletid");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("walletid", "hex34");
@@ -556,6 +561,57 @@ void On_resolve_handle(const ContractID& cid)
         Env::DocAddText("display_name", profile.m_DisplayName);
 }
 
+// Prefix search: returns all handles starting with the given prefix (max 20 results)
+void On_search_handles(const ContractID& cid)
+{
+    char szPrefix[PriviMe::s_MaxHandleLen + 1];
+    Env::Memset(szPrefix, 0, sizeof(szPrefix));
+    if (!Env::DocGetText("prefix", szPrefix, sizeof(szPrefix)))
+        return OnError("prefix required");
+
+    // Normalize to lowercase
+    uint32_t prefixLen = 0;
+    for (uint32_t i = 0; i < PriviMe::s_MaxHandleLen && szPrefix[i]; i++) {
+        char c = szPrefix[i];
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+        szPrefix[i] = c;
+        prefixLen++;
+    }
+    if (prefixLen == 0) return OnError("prefix empty");
+
+    // Build key range: k0 = prefix padded with 0x00, k1 = prefix padded with 0xFF
+    Env::Key_T<PriviMe::HandleKey> k0, k1;
+    _POD_(k0.m_Prefix.m_Cid) = cid;
+    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
+    Env::Memset(k0.m_KeyInContract.m_Handle, 0, sizeof(k0.m_KeyInContract.m_Handle));
+    Env::Memcpy(k0.m_KeyInContract.m_Handle, szPrefix, prefixLen);
+
+    _POD_(k1.m_Prefix.m_Cid) = cid;
+    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
+    Env::Memset(k1.m_KeyInContract.m_Handle, 0, sizeof(k1.m_KeyInContract.m_Handle));
+    Env::Memcpy(k1.m_KeyInContract.m_Handle, szPrefix, prefixLen);
+    // Fill remaining bytes after prefix with 0xFF to create upper bound
+    for (uint32_t i = prefixLen; i < PriviMe::s_MaxHandleLen; i++)
+        k1.m_KeyInContract.m_Handle[i] = (char)0xFF;
+
+    Env::DocArray gr("results");
+    uint32_t count = 0;
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::HandleKey> key;
+    PriviMe::Profile p;
+
+    while (scanner.MoveNext_T(key, p) && count < 20)
+    {
+        Env::DocGroup entry("");
+        Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
+        DocAddWalletId("wallet_id", p.m_WalletIdRaw);
+        Env::DocAddNum("registered_height", p.m_RegisteredHeight);
+        if (p.m_DisplayName[0])
+            Env::DocAddText("display_name", p.m_DisplayName);
+        count++;
+    }
+}
+
 // Reverse lookup: WalletID -> @handle + display_name (O(n) scan — acceptable for v1)
 // Used by UI to show @handle next to incoming messages (sender is a WalletID)
 void On_resolve_walletid(const ContractID& cid)
@@ -696,6 +752,7 @@ BEAM_EXPORT void Method_1()
         if (!Env::Strcmp(szAction, "update_profile"))   return On_update_profile(cid);
         if (!Env::Strcmp(szAction, "release_handle"))   return On_release_handle(cid);
         if (!Env::Strcmp(szAction, "resolve_handle"))   return On_resolve_handle(cid);
+        if (!Env::Strcmp(szAction, "search_handles"))  return On_search_handles(cid);
         if (!Env::Strcmp(szAction, "resolve_walletid")) return On_resolve_walletid(cid);
         if (!Env::Strcmp(szAction, "view_recent"))      return On_view_recent(cid);
         return OnError("invalid action");
