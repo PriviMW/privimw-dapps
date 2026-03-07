@@ -7,6 +7,10 @@ import { activeChat, myHandle, contacts, conversations,
          pendingFile, setPendingFile,
          downloadedFiles, setDownloadedFile,
          bubbleCtxMsg, bubbleCtxWid } from './state.js';
+
+// LRU eviction for blob URLs — prevents unbounded memory growth
+var blobUrlOrder = []; // CIDs in insertion order (oldest first)
+var MAX_CACHED_BLOBS = 30;
 import { showToast, extractError, escHtml, formatFileSize,
          isImageMime, truncateFilename, saveFileWithPicker } from './helpers.js';
 import { saveToStorage } from './storage.js';
@@ -219,16 +223,31 @@ export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
 
         if (actionEl) actionEl.textContent = 'Decrypting...';
 
+        // Validate actual download size (prevents spoofed metadata size
+        // from bypassing AUTO_DL_MAX_SIZE for auto-downloads)
+        if (result.length > MAX_FILE_SIZE) {
+            throw new Error('Downloaded file exceeds size limit');
+        }
+
         // Convert uint8 array to ArrayBuffer
         var cipherBuf = new Uint8Array(result).buffer;
 
         // Decrypt
         var plaintext = await decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
 
-        // Create blob URL and cache
+        // Create blob URL and cache with LRU eviction
         var blob = new Blob([plaintext], { type: fileInfo.mime });
         var blobUrl = URL.createObjectURL(blob);
         setDownloadedFile(fileInfo.cid, blobUrl);
+        blobUrlOrder.push(fileInfo.cid);
+        // Evict oldest blob URLs when cache exceeds limit
+        while (blobUrlOrder.length > MAX_CACHED_BLOBS) {
+            var oldCid = blobUrlOrder.shift();
+            if (downloadedFiles[oldCid]) {
+                URL.revokeObjectURL(downloadedFiles[oldCid]);
+                delete downloadedFiles[oldCid];
+            }
+        }
 
         if (isImageMime(fileInfo.mime)) {
             showInlineImage(blobUrl, bubbleEl);
@@ -263,10 +282,15 @@ async function triggerDownloadFromUrl(blobUrl, filename, mime) {
 // ================================================================
 
 var autoDownloadPending = {}; // { cid: true } — prevent concurrent downloads
+var autoDownloadActive = 0;
+var MAX_CONCURRENT_AUTO_DL = 3;
 
 export function autoDownloadImages() {
     var bubbles = document.querySelectorAll('.msg-bubble.file');
     bubbles.forEach(function(bubble) {
+        // Concurrency cap — stop queuing when limit reached
+        if (autoDownloadActive >= MAX_CONCURRENT_AUTO_DL) return;
+
         var cidAttr = bubble.getAttribute('data-cid');
         if (!cidAttr) return;
         // Already downloaded or in progress
@@ -280,6 +304,7 @@ export function autoDownloadImages() {
         if (bubble.querySelector('.file-inline-img')) return;
 
         autoDownloadPending[cidAttr] = true;
+        autoDownloadActive++;
 
         // Find the full file info from conversations
         var keyAttr = bubble.getAttribute('data-key');
@@ -291,6 +316,9 @@ export function autoDownloadImages() {
             name: nameAttr, size: sizeAttr, mime: mimeAttr
         }, bubble).finally(function() {
             delete autoDownloadPending[cidAttr];
+            autoDownloadActive--;
+            // Trigger next batch after one completes
+            autoDownloadImages();
         });
     });
 }

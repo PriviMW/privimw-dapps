@@ -69,12 +69,24 @@ describe('escHtml', () => {
 });
 
 describe('escAttr', () => {
-    it('escapes single quotes for onclick attributes', () => {
-        expect(escAttr("@user's")).toBe("@user\\'s");
+    it('escapes single quotes as HTML entities', () => {
+        expect(escAttr("@user's")).toBe("@user&#39;s");
+    });
+
+    it('escapes double quotes', () => {
+        expect(escAttr('a"b')).toBe('a&quot;b');
     });
 
     it('escapes backslashes', () => {
         expect(escAttr('a\\b')).toBe('a\\\\b');
+    });
+
+    it('escapes angle brackets', () => {
+        expect(escAttr('<script>')).toBe('&lt;script&gt;');
+    });
+
+    it('escapes ampersands', () => {
+        expect(escAttr('a&b')).toBe('a&amp;b');
     });
 
     it('handles normal handle keys', () => {
@@ -83,7 +95,12 @@ describe('escAttr', () => {
 
     it('handles crafted XSS attempt in handle', () => {
         // A malicious handle like: '); alert('xss
-        expect(escAttr("'); alert('xss")).toBe("\\'); alert(\\'xss");
+        expect(escAttr("'); alert('xss")).toBe("&#39;); alert(&#39;xss");
+    });
+
+    it('handles attribute breakout attempt', () => {
+        // Attacker tries to break out of data-name="..." attribute
+        expect(escAttr('" onload="alert(1)')).toBe('&quot; onload=&quot;alert(1)');
     });
 });
 

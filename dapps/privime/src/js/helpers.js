@@ -27,9 +27,15 @@ export function escHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-// Escape for use inside onclick/oncontextmenu attribute single-quoted strings
+// Escape for use inside HTML attribute strings (both single and double-quoted contexts)
 export function escAttr(str) {
-    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\\/g, '\\\\');
 }
 
 export function formatTs(ts) {

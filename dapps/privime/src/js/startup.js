@@ -1,6 +1,6 @@
 'use strict';
 
-import { GROTH_PER_BEAM } from './config.js';
+import { GROTH_PER_BEAM, ALLOWED_MIME_TYPES } from './config.js';
 import { MSG_REFRESH_MS } from './config.js';
 import { isConnected, setConnected, shaderBytes, myHandle, setMyHandle,
          myWalletId, setMyWalletId, conversations, setConversations,
@@ -253,14 +253,21 @@ export function processMessages(result) {
                 msgData.isTip = true;
                 msgData.tipAmount = payload.amount || 0;
             }
-            if (payload.t === 'file' && payload.file) {
+            if (payload.t === 'file' && payload.file && typeof payload.file === 'object') {
+                var pf = payload.file;
+                var fCid = String(pf.cid || '');
+                var fKey = String(pf.key || '');
+                var fIv = String(pf.iv || '');
+                var fMime = String(pf.mime || 'application/octet-stream');
+                var fSize = parseInt(pf.size, 10) || 0;
+                var fName = String(pf.name || 'file').replace(/[<>"'&\\]/g, '_').substring(0, 80);
+                // Validate: CID non-empty, key=64 hex, iv=24 hex
+                if (!fCid || !/^[a-fA-F0-9]{64}$/.test(fKey) || !/^[a-fA-F0-9]{24}$/.test(fIv)) return;
+                // Enforce MIME whitelist on receiver side
+                if (ALLOWED_MIME_TYPES.indexOf(fMime) === -1) fMime = 'application/octet-stream';
                 msgData.file = {
-                    cid: payload.file.cid || '',
-                    key: payload.file.key || '',
-                    iv: payload.file.iv || '',
-                    name: payload.file.name || 'file',
-                    size: payload.file.size || 0,
-                    mime: payload.file.mime || 'application/octet-stream'
+                    cid: fCid, key: fKey, iv: fIv,
+                    name: fName, size: fSize, mime: fMime
                 };
                 msgData.text = payload.msg || ''; // caption
             }

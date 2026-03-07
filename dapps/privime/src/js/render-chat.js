@@ -59,7 +59,7 @@ export function renderChatMessages(walletId, forceScroll) {
                 ' data-key="' + escAttr(m.file.key) + '"' +
                 ' data-iv="' + escAttr(m.file.iv) + '"' +
                 ' data-mime="' + escAttr(m.file.mime) + '"' +
-                ' data-size="' + m.file.size + '"' +
+                ' data-size="' + (parseInt(m.file.size, 10) || 0) + '"' +
                 ' data-name="' + escAttr(m.file.name) + '"';
             var fileIcon = isImageMime(m.file.mime) ? '\u{1F5BC}' : '\u{1F4CE}';
             var sizeStr = formatFileSize(m.file.size);
