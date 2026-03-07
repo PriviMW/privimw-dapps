@@ -188,7 +188,20 @@
                 <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
             </button>
         </div>
-        <div id="chatMessages" class="chat-messages"></div>
+        <div id="chatMessages" class="chat-messages"
+             ondragover="onChatDragOver(event)"
+             ondragenter="onChatDragEnter(event)"
+             ondragleave="onChatDragLeave(event)"
+             ondrop="onChatDrop(event)">
+            <div id="dropOverlay" class="drop-overlay">
+                <div class="drop-overlay-content">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px;">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.49"/>
+                    </svg>
+                    <div>Drop file here</div>
+                </div>
+            </div>
+        </div>
         <div class="chat-input-area">
             <input type="file" id="filePickerInput" style="display:none"
                    accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain"

@@ -84,7 +84,8 @@ import { detectAndConnect } from './wallet-connect.js';
 // File sharing
 import { openFilePicker, handleFileSelection, onFileAction,
          openLightbox, closeLightbox, copyLightboxImage,
-         cancelFileAttachment, doSaveFileBubble } from './file-sharing.js';
+         cancelFileAttachment, doSaveFileBubble,
+         onChatDragOver, onChatDragEnter, onChatDragLeave, onChatDrop } from './file-sharing.js';
 
 // Crypto (no direct window exports)
 import './crypto.js';
@@ -191,6 +192,10 @@ window.closeLightbox = closeLightbox;
 window.copyLightboxImage = copyLightboxImage;
 window.cancelFileAttachment = cancelFileAttachment;
 window.doSaveFileBubble = doSaveFileBubble;
+window.onChatDragOver = onChatDragOver;
+window.onChatDragEnter = onChatDragEnter;
+window.onChatDragLeave = onChatDragLeave;
+window.onChatDrop = onChatDrop;
 
 // File viewer
 window.closeFileViewer = closeFileViewer;

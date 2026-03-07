@@ -1,7 +1,8 @@
 'use strict';
 
 import { MAX_FILE_SIZE, IPFS_ADD_TIMEOUT, IPFS_GET_TIMEOUT,
-         ALLOWED_MIME_TYPES, AUTO_DL_MAX_SIZE } from './config.js';
+         ALLOWED_MIME_TYPES, AUTO_DL_MAX_SIZE,
+         COMPRESS_MAX_DIM, COMPRESS_QUALITY, COMPRESS_MIN_SIZE } from './config.js';
 import { activeChat, myHandle, contacts, conversations,
          fileUploadInProgress, setFileUploadInProgress,
          pendingFile, setPendingFile,
@@ -11,6 +12,72 @@ import { activeChat, myHandle, contacts, conversations,
 // LRU eviction for blob URLs — prevents unbounded memory growth
 var blobUrlOrder = []; // CIDs in insertion order (oldest first)
 var MAX_CACHED_BLOBS = 30;
+
+// ================================================================
+// INDEXEDDB CACHE — persist decrypted files across sessions
+// ================================================================
+var IDB_NAME = 'privime_files';
+var IDB_STORE = 'files';
+var IDB_VERSION = 1;
+var IDB_MAX_ENTRIES = 100;
+var _idb = null;
+
+function openIDB() {
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise(function(resolve, reject) {
+        var req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = function(e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                var store = db.createObjectStore(IDB_STORE, { keyPath: 'cid' });
+                store.createIndex('ts', 'ts');
+            }
+        };
+        req.onsuccess = function() { _idb = req.result; resolve(_idb); };
+        req.onerror = function() { resolve(null); };
+    });
+}
+
+async function idbGet(cid) {
+    try {
+        var db = await openIDB();
+        if (!db) return null;
+        return new Promise(function(resolve) {
+            var tx = db.transaction(IDB_STORE, 'readonly');
+            var req = tx.objectStore(IDB_STORE).get(cid);
+            req.onsuccess = function() { resolve(req.result || null); };
+            req.onerror = function() { resolve(null); };
+        });
+    } catch (e) { return null; }
+}
+
+async function idbPut(cid, blob, mime) {
+    try {
+        var db = await openIDB();
+        if (!db) return;
+        var buf = await blob.arrayBuffer();
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        var store = tx.objectStore(IDB_STORE);
+        store.put({ cid: cid, data: buf, mime: mime, ts: Date.now() });
+        // Evict oldest entries if over limit
+        var countReq = store.count();
+        countReq.onsuccess = function() {
+            if (countReq.result > IDB_MAX_ENTRIES) {
+                var idx = store.index('ts');
+                var delCount = countReq.result - IDB_MAX_ENTRIES;
+                var cursor = idx.openCursor();
+                cursor.onsuccess = function(e) {
+                    var c = e.target.result;
+                    if (c && delCount > 0) {
+                        c.delete();
+                        delCount--;
+                        c.continue();
+                    }
+                };
+            }
+        };
+    } catch (e) { /* IDB write failed, non-fatal */ }
+}
 import { showToast, extractError, escHtml, formatFileSize,
          isImageMime, truncateFilename, saveFileWithPicker } from './helpers.js';
 import { saveToStorage } from './storage.js';
@@ -72,6 +139,92 @@ export function cancelFileAttachment() {
 }
 
 // ================================================================
+// DRAG AND DROP
+// ================================================================
+
+var dropCounter = 0; // track nested dragenter/dragleave
+
+export function onChatDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+}
+
+export function onChatDragEnter(e) {
+    e.preventDefault();
+    dropCounter++;
+    var overlay = document.getElementById('dropOverlay');
+    if (overlay) overlay.classList.add('active');
+}
+
+export function onChatDragLeave(e) {
+    e.preventDefault();
+    dropCounter--;
+    if (dropCounter <= 0) {
+        dropCounter = 0;
+        var overlay = document.getElementById('dropOverlay');
+        if (overlay) overlay.classList.remove('active');
+    }
+}
+
+export function onChatDrop(e) {
+    e.preventDefault();
+    dropCounter = 0;
+    var overlay = document.getElementById('dropOverlay');
+    if (overlay) overlay.classList.remove('active');
+
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) {
+        handleFileSelection(files[0]);
+    }
+}
+
+// ================================================================
+// IMAGE COMPRESSION
+// ================================================================
+
+function shouldCompress(file) {
+    return isImageMime(file.type) && file.type !== 'image/gif' &&
+           file.size > COMPRESS_MIN_SIZE;
+}
+
+async function compressImage(file) {
+    var blobUrl = URL.createObjectURL(file);
+    try {
+        var img = new Image();
+        img.src = blobUrl;
+        await new Promise(function(resolve, reject) {
+            img.onload = resolve;
+            img.onerror = function() { reject(new Error('Failed to load image')); };
+        });
+
+        var w = img.naturalWidth, h = img.naturalHeight;
+        // Only resize if larger than max dimension
+        if (w > COMPRESS_MAX_DIM || h > COMPRESS_MAX_DIM) {
+            var ratio = Math.min(COMPRESS_MAX_DIM / w, COMPRESS_MAX_DIM / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+        }
+
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+        var blob = await new Promise(function(resolve) {
+            canvas.toBlob(resolve, 'image/jpeg', COMPRESS_QUALITY);
+        });
+
+        // Only use compressed version if it's actually smaller
+        if (blob.size < file.size) {
+            return blob;
+        }
+        return null; // original is smaller, skip compression
+    } finally {
+        URL.revokeObjectURL(blobUrl);
+    }
+}
+
+// ================================================================
 // SENDER FLOW
 // ================================================================
 
@@ -89,23 +242,41 @@ export async function sendFile(file, caption) {
     }
 
     setFileUploadInProgress(true);
-    showToast('Encrypting...', 'info');
 
     try {
-        // 1. Read file
+        // 1. Compress images (resize + JPEG encode)
+        var sendMime = file.type;
+        var sendSize = file.size;
+        var sendName = file.name;
+        if (shouldCompress(file)) {
+            showToast('Compressing...', 'info');
+            var compressed = await compressImage(file);
+            if (compressed) {
+                file = compressed;
+                sendMime = 'image/jpeg';
+                sendSize = compressed.size;
+                // Update extension if original wasn't JPEG
+                if (sendName && !/\.jpe?g$/i.test(sendName)) {
+                    sendName = sendName.replace(/\.[^.]+$/, '.jpg');
+                }
+            }
+        }
+
+        // 2. Read file
+        showToast('Encrypting...', 'info');
         var plaintext = await file.arrayBuffer();
 
-        // 2. Generate key + IV
+        // 3. Generate key + IV
         var ck = await generateFileKey();
 
-        // 3. Encrypt
+        // 4. Encrypt
         var ciphertext = await encryptFile(plaintext, ck.key, ck.iv);
 
-        // 4. Convert to uint8 array for IPFS API
+        // 5. Convert to uint8 array for IPFS API
         showToast('Uploading to IPFS...', 'info');
         var uint8Arr = Array.from(new Uint8Array(ciphertext));
 
-        // 5. Upload to IPFS
+        // 6. Upload to IPFS
         var ipfsCid = await new Promise(function(resolve, reject) {
             callApi('ipfs_add', {
                 data: uint8Arr,
@@ -122,15 +293,15 @@ export async function sendFile(file, caption) {
             });
         });
 
-        // 6. Construct SBBS message
+        // 7. Construct SBBS message
         var ts = Math.floor(Date.now() / 1000);
         var fileMeta = {
             cid: ipfsCid,
             key: ck.keyHex,
             iv: ck.ivHex,
-            name: truncateFilename(file.name, 60),
-            size: file.size,
-            mime: file.type
+            name: truncateFilename(sendName, 60),
+            size: sendSize,
+            mime: sendMime
         };
 
         var msgObj = {
@@ -143,7 +314,7 @@ export async function sendFile(file, caption) {
         if (caption) msgObj.msg = caption;
         msgObj.file = fileMeta;
 
-        // 7. Instant UI
+        // 8. Instant UI
         if (!conversations[convKey]) conversations[convKey] = [];
         conversations[convKey].push({
             text: caption || '',
@@ -154,7 +325,7 @@ export async function sendFile(file, caption) {
         saveToStorage();
         renderChatMessages(convKey);
 
-        // 8. Send via SBBS
+        // 9. Send via SBBS
         sendSbbsMessage(receiver, msgObj, function(result) {
             if (result && result.error) {
                 // Roll back
@@ -192,7 +363,7 @@ export function onFileAction(event, idx) {
 }
 
 export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
-    // Check session cache first
+    // Check in-memory session cache first
     if (downloadedFiles[fileInfo.cid]) {
         if (isImageMime(fileInfo.mime)) {
             showInlineImage(downloadedFiles[fileInfo.cid], bubbleEl);
@@ -203,6 +374,21 @@ export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
     }
 
     var actionEl = bubbleEl ? bubbleEl.querySelector('.file-action') : null;
+
+    // Check IndexedDB cache (persists across sessions)
+    var cached = await idbGet(fileInfo.cid);
+    if (cached && cached.data) {
+        var cachedBlob = new Blob([cached.data], { type: cached.mime || fileInfo.mime });
+        var cachedUrl = URL.createObjectURL(cachedBlob);
+        cacheBlobUrl(fileInfo.cid, cachedUrl);
+        if (isImageMime(fileInfo.mime)) {
+            showInlineImage(cachedUrl, bubbleEl);
+        } else {
+            triggerDownloadFromUrl(cachedUrl, fileInfo.name, fileInfo.mime);
+        }
+        return;
+    }
+
     if (actionEl) actionEl.textContent = 'Downloading...';
 
     try {
@@ -235,19 +421,13 @@ export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
         // Decrypt
         var plaintext = await decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
 
-        // Create blob URL and cache with LRU eviction
+        // Create blob + cache in memory and IndexedDB
         var blob = new Blob([plaintext], { type: fileInfo.mime });
         var blobUrl = URL.createObjectURL(blob);
-        setDownloadedFile(fileInfo.cid, blobUrl);
-        blobUrlOrder.push(fileInfo.cid);
-        // Evict oldest blob URLs when cache exceeds limit
-        while (blobUrlOrder.length > MAX_CACHED_BLOBS) {
-            var oldCid = blobUrlOrder.shift();
-            if (downloadedFiles[oldCid]) {
-                URL.revokeObjectURL(downloadedFiles[oldCid]);
-                delete downloadedFiles[oldCid];
-            }
-        }
+        cacheBlobUrl(fileInfo.cid, blobUrl);
+
+        // Persist to IndexedDB for cross-session cache
+        idbPut(fileInfo.cid, blob, fileInfo.mime);
 
         if (isImageMime(fileInfo.mime)) {
             showInlineImage(blobUrl, bubbleEl);
@@ -258,6 +438,19 @@ export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
     } catch (err) {
         if (actionEl) actionEl.textContent = 'Retry';
         showToast('Download failed: ' + (err.message || err), 'error');
+    }
+}
+
+function cacheBlobUrl(cid, blobUrl) {
+    setDownloadedFile(cid, blobUrl);
+    blobUrlOrder.push(cid);
+    // Evict oldest blob URLs when cache exceeds limit
+    while (blobUrlOrder.length > MAX_CACHED_BLOBS) {
+        var oldCid = blobUrlOrder.shift();
+        if (downloadedFiles[oldCid]) {
+            URL.revokeObjectURL(downloadedFiles[oldCid]);
+            delete downloadedFiles[oldCid];
+        }
     }
 }
 

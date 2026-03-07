@@ -18,3 +18,8 @@ export var ALLOWED_MIME_TYPES = [
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
     'application/pdf', 'text/plain'
 ];
+
+// Image compression before upload
+export var COMPRESS_MAX_DIM  = 1200;   // max width or height in px
+export var COMPRESS_QUALITY  = 0.82;   // JPEG quality (0-1)
+export var COMPRESS_MIN_SIZE = 100 * 1024; // only compress images > 100 KB

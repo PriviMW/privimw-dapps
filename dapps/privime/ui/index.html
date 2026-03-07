@@ -954,6 +954,21 @@ a { color: inherit; text-decoration: none; }
     width: 100%; height: 100%; padding: 16px; box-sizing: border-box;
 }
 .file-viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* ==================== DROP OVERLAY ==================== */
+.drop-overlay {
+    display: none; position: absolute; inset: 0; z-index: 50;
+    background: rgba(0, 200, 180, 0.08);
+    border: 2px dashed var(--accent-teal);
+    border-radius: var(--radius-md);
+    pointer-events: none;
+}
+.drop-overlay.active { display: flex; align-items: center; justify-content: center; }
+.drop-overlay-content {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--accent-teal); font-size: 14px; font-weight: 600;
+}
+.chat-messages { position: relative; }
     </style>
 </head>
 <body>
@@ -1135,7 +1150,20 @@ a { color: inherit; text-decoration: none; }
                 <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
             </button>
         </div>
-        <div id="chatMessages" class="chat-messages"></div>
+        <div id="chatMessages" class="chat-messages"
+             ondragover="onChatDragOver(event)"
+             ondragenter="onChatDragEnter(event)"
+             ondragleave="onChatDragLeave(event)"
+             ondrop="onChatDrop(event)">
+            <div id="dropOverlay" class="drop-overlay">
+                <div class="drop-overlay-content">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px;">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.49"/>
+                    </svg>
+                    <div>Drop file here</div>
+                </div>
+            </div>
+        </div>
         <div class="chat-input-area">
             <input type="file" id="filePickerInput" style="display:none"
                    accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain"
@@ -1362,6 +1390,9 @@ a { color: inherit; text-decoration: none; }
     "application/pdf",
     "text/plain"
   ];
+  var COMPRESS_MAX_DIM = 1200;
+  var COMPRESS_QUALITY = 0.82;
+  var COMPRESS_MIN_SIZE = 100 * 1024;
 
   // src/js/state.js
   var BEAM = null;
@@ -2164,6 +2195,80 @@ a { color: inherit; text-decoration: none; }
   // src/js/file-sharing.js
   var blobUrlOrder = [];
   var MAX_CACHED_BLOBS = 30;
+  var IDB_NAME = "privime_files";
+  var IDB_STORE = "files";
+  var IDB_VERSION = 1;
+  var IDB_MAX_ENTRIES = 100;
+  var _idb = null;
+  function openIDB() {
+    if (_idb) return Promise.resolve(_idb);
+    return new Promise(function(resolve, reject) {
+      var req = indexedDB.open(IDB_NAME, IDB_VERSION);
+      req.onupgradeneeded = function(e) {
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          var store = db.createObjectStore(IDB_STORE, { keyPath: "cid" });
+          store.createIndex("ts", "ts");
+        }
+      };
+      req.onsuccess = function() {
+        _idb = req.result;
+        resolve(_idb);
+      };
+      req.onerror = function() {
+        resolve(null);
+      };
+    });
+  }
+  function idbGet(cid) {
+    return __async(this, null, function* () {
+      try {
+        var db = yield openIDB();
+        if (!db) return null;
+        return new Promise(function(resolve) {
+          var tx = db.transaction(IDB_STORE, "readonly");
+          var req = tx.objectStore(IDB_STORE).get(cid);
+          req.onsuccess = function() {
+            resolve(req.result || null);
+          };
+          req.onerror = function() {
+            resolve(null);
+          };
+        });
+      } catch (e) {
+        return null;
+      }
+    });
+  }
+  function idbPut(cid, blob, mime) {
+    return __async(this, null, function* () {
+      try {
+        var db = yield openIDB();
+        if (!db) return;
+        var buf = yield blob.arrayBuffer();
+        var tx = db.transaction(IDB_STORE, "readwrite");
+        var store = tx.objectStore(IDB_STORE);
+        store.put({ cid, data: buf, mime, ts: Date.now() });
+        var countReq = store.count();
+        countReq.onsuccess = function() {
+          if (countReq.result > IDB_MAX_ENTRIES) {
+            var idx = store.index("ts");
+            var delCount = countReq.result - IDB_MAX_ENTRIES;
+            var cursor = idx.openCursor();
+            cursor.onsuccess = function(e) {
+              var c = e.target.result;
+              if (c && delCount > 0) {
+                c.delete();
+                delCount--;
+                c.continue();
+              }
+            };
+          }
+        };
+      } catch (e) {
+      }
+    });
+  }
   function openFilePicker() {
     if (!activeChat || !myHandle) return;
     var input = document.getElementById("filePickerInput");
@@ -2205,6 +2310,73 @@ a { color: inherit; text-decoration: none; }
     var input = document.getElementById("chatInput");
     if (input) input.placeholder = "Message...";
   }
+  var dropCounter = 0;
+  function onChatDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+  function onChatDragEnter(e) {
+    e.preventDefault();
+    dropCounter++;
+    var overlay = document.getElementById("dropOverlay");
+    if (overlay) overlay.classList.add("active");
+  }
+  function onChatDragLeave(e) {
+    e.preventDefault();
+    dropCounter--;
+    if (dropCounter <= 0) {
+      dropCounter = 0;
+      var overlay = document.getElementById("dropOverlay");
+      if (overlay) overlay.classList.remove("active");
+    }
+  }
+  function onChatDrop(e) {
+    e.preventDefault();
+    dropCounter = 0;
+    var overlay = document.getElementById("dropOverlay");
+    if (overlay) overlay.classList.remove("active");
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileSelection(files[0]);
+    }
+  }
+  function shouldCompress(file) {
+    return isImageMime(file.type) && file.type !== "image/gif" && file.size > COMPRESS_MIN_SIZE;
+  }
+  function compressImage(file) {
+    return __async(this, null, function* () {
+      var blobUrl = URL.createObjectURL(file);
+      try {
+        var img = new Image();
+        img.src = blobUrl;
+        yield new Promise(function(resolve, reject) {
+          img.onload = resolve;
+          img.onerror = function() {
+            reject(new Error("Failed to load image"));
+          };
+        });
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w > COMPRESS_MAX_DIM || h > COMPRESS_MAX_DIM) {
+          var ratio = Math.min(COMPRESS_MAX_DIM / w, COMPRESS_MAX_DIM / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        var blob = yield new Promise(function(resolve) {
+          canvas.toBlob(resolve, "image/jpeg", COMPRESS_QUALITY);
+        });
+        if (blob.size < file.size) {
+          return blob;
+        }
+        return null;
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    });
+  }
   function sendFile(file, caption) {
     return __async(this, null, function* () {
       if (fileUploadInProgress) {
@@ -2218,8 +2390,23 @@ a { color: inherit; text-decoration: none; }
         return;
       }
       setFileUploadInProgress(true);
-      showToast("Encrypting...", "info");
       try {
+        var sendMime = file.type;
+        var sendSize = file.size;
+        var sendName = file.name;
+        if (shouldCompress(file)) {
+          showToast("Compressing...", "info");
+          var compressed = yield compressImage(file);
+          if (compressed) {
+            file = compressed;
+            sendMime = "image/jpeg";
+            sendSize = compressed.size;
+            if (sendName && !/\.jpe?g$/i.test(sendName)) {
+              sendName = sendName.replace(/\.[^.]+$/, ".jpg");
+            }
+          }
+        }
+        showToast("Encrypting...", "info");
         var plaintext = yield file.arrayBuffer();
         var ck = yield generateFileKey();
         var ciphertext = yield encryptFile(plaintext, ck.key, ck.iv);
@@ -2245,9 +2432,9 @@ a { color: inherit; text-decoration: none; }
           cid: ipfsCid,
           key: ck.keyHex,
           iv: ck.ivHex,
-          name: truncateFilename(file.name, 60),
-          size: file.size,
-          mime: file.type
+          name: truncateFilename(sendName, 60),
+          size: sendSize,
+          mime: sendMime
         };
         var msgObj = {
           v: 1,
@@ -2314,6 +2501,18 @@ a { color: inherit; text-decoration: none; }
         return;
       }
       var actionEl = bubbleEl ? bubbleEl.querySelector(".file-action") : null;
+      var cached = yield idbGet(fileInfo.cid);
+      if (cached && cached.data) {
+        var cachedBlob = new Blob([cached.data], { type: cached.mime || fileInfo.mime });
+        var cachedUrl = URL.createObjectURL(cachedBlob);
+        cacheBlobUrl(fileInfo.cid, cachedUrl);
+        if (isImageMime(fileInfo.mime)) {
+          showInlineImage(cachedUrl, bubbleEl);
+        } else {
+          triggerDownloadFromUrl(cachedUrl, fileInfo.name, fileInfo.mime);
+        }
+        return;
+      }
       if (actionEl) actionEl.textContent = "Downloading...";
       try {
         var result = yield new Promise(function(resolve, reject) {
@@ -2338,15 +2537,8 @@ a { color: inherit; text-decoration: none; }
         var plaintext = yield decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
         var blob = new Blob([plaintext], { type: fileInfo.mime });
         var blobUrl = URL.createObjectURL(blob);
-        setDownloadedFile(fileInfo.cid, blobUrl);
-        blobUrlOrder.push(fileInfo.cid);
-        while (blobUrlOrder.length > MAX_CACHED_BLOBS) {
-          var oldCid = blobUrlOrder.shift();
-          if (downloadedFiles[oldCid]) {
-            URL.revokeObjectURL(downloadedFiles[oldCid]);
-            delete downloadedFiles[oldCid];
-          }
-        }
+        cacheBlobUrl(fileInfo.cid, blobUrl);
+        idbPut(fileInfo.cid, blob, fileInfo.mime);
         if (isImageMime(fileInfo.mime)) {
           showInlineImage(blobUrl, bubbleEl);
         } else {
@@ -2358,6 +2550,17 @@ a { color: inherit; text-decoration: none; }
         showToast("Download failed: " + (err.message || err), "error");
       }
     });
+  }
+  function cacheBlobUrl(cid, blobUrl) {
+    setDownloadedFile(cid, blobUrl);
+    blobUrlOrder.push(cid);
+    while (blobUrlOrder.length > MAX_CACHED_BLOBS) {
+      var oldCid = blobUrlOrder.shift();
+      if (downloadedFiles[oldCid]) {
+        URL.revokeObjectURL(downloadedFiles[oldCid]);
+        delete downloadedFiles[oldCid];
+      }
+    }
   }
   function showInlineImage(blobUrl, bubbleEl) {
     if (!bubbleEl) return;
@@ -4316,6 +4519,10 @@ a { color: inherit; text-decoration: none; }
   window.copyLightboxImage = copyLightboxImage;
   window.cancelFileAttachment = cancelFileAttachment;
   window.doSaveFileBubble = doSaveFileBubble;
+  window.onChatDragOver = onChatDragOver;
+  window.onChatDragEnter = onChatDragEnter;
+  window.onChatDragLeave = onChatDragLeave;
+  window.onChatDrop = onChatDrop;
   window.closeFileViewer = closeFileViewer;
   window.viewerCopyOrSave = viewerCopyOrSave;
   window.copyToClipboard = copyToClipboard;
