@@ -827,6 +827,133 @@ a { color: inherit; text-decoration: none; }
     font-size: 18px; font-weight: 700;
 }
 .slash-btn:hover { color: var(--text-primary); }
+
+/* ==================== FILE SHARING ==================== */
+
+/* Attach button */
+.attach-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: var(--text-muted);
+    transition: color var(--transition);
+}
+.attach-btn:hover { color: var(--text-primary); }
+.attach-btn svg { width: 20px; height: 20px; }
+
+/* File bubble */
+.msg-bubble.file { padding: 6px; }
+.file-bubble-inner { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
+.file-info-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+.file-icon { font-size: 24px; flex-shrink: 0; }
+.file-details { flex: 1; min-width: 0; }
+.file-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-size { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.file-action {
+    padding: 6px 12px; border-radius: var(--radius-sm);
+    background: var(--bg-card); border: 1px solid var(--border-color);
+    font-size: 12px; font-weight: 600; color: var(--accent-teal);
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.file-action:hover { background: var(--bg-hover); }
+.file-caption { font-size: 13px; padding: 2px 8px 4px; }
+
+/* Inline image preview */
+.file-preview { border-radius: var(--radius-md); overflow: hidden; }
+.file-inline-img {
+    width: 100%; max-width: 280px; border-radius: var(--radius-md);
+    cursor: pointer; display: block;
+}
+
+/* File loading spinner */
+.file-loading-spinner {
+    width: 40px; height: 40px; margin: 16px auto;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-teal);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Lightbox */
+.lightbox-overlay {
+    display: none; position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.92); z-index: 300;
+    align-items: center; justify-content: center; cursor: pointer;
+}
+.lightbox-overlay.active { display: flex; }
+.lightbox-img {
+    max-width: 90vw; max-height: 85vh;
+    object-fit: contain; border-radius: 4px;
+    margin: auto;
+}
+.lightbox-close {
+    position: fixed; top: 12px; right: 16px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); border: none;
+    color: #fff; font-size: 24px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.lightbox-close:hover { background: rgba(255,255,255,0.25); }
+.lightbox-controls {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px;
+}
+.lightbox-action-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 20px;
+    background: rgba(255,255,255,0.15); border: none;
+    color: #fff; font-size: 13px; font-weight: 600;
+    cursor: pointer; backdrop-filter: blur(8px);
+}
+.lightbox-action-btn:hover { background: rgba(255,255,255,0.25); }
+.lightbox-action-btn svg { width: 16px; height: 16px; }
+
+/* File preview bar (reuses reply-bar styling) */
+#filePreviewBar .reply-bar-content { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+#filePreviewBar .file-icon { font-size: 18px; }
+
+/* File viewer overlay (in-app PDF/text viewer) */
+.file-viewer-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--bg-primary); z-index: 250;
+    display: flex; flex-direction: column;
+}
+.file-viewer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+}
+.file-viewer-name {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+.file-viewer-close {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: none; border: none; color: var(--text-primary);
+    font-size: 22px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.file-viewer-close:hover { background: var(--bg-hover); }
+.file-viewer-body { flex: 1; overflow: auto; min-height: 0; }
+.file-viewer-frame { width: 100%; height: 100%; border: none; }
+.file-viewer-save-btn {
+    padding: 6px 14px; border-radius: var(--radius-sm);
+    background: var(--accent-teal); border: none;
+    color: #fff; font-size: 13px; font-weight: 600;
+    cursor: pointer; flex-shrink: 0;
+}
+.file-viewer-save-btn:hover { opacity: 0.85; }
+.file-viewer-text {
+    padding: 16px; font-size: 13px; line-height: 1.6;
+    color: var(--text-primary); white-space: pre-wrap; word-break: break-word;
+    font-family: monospace;
+}
+.file-viewer-img-wrap {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%; padding: 16px; box-sizing: border-box;
+}
+.file-viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
@@ -1010,10 +1137,20 @@ a { color: inherit; text-decoration: none; }
         </div>
         <div id="chatMessages" class="chat-messages"></div>
         <div class="chat-input-area">
+            <input type="file" id="filePickerInput" style="display:none"
+                   accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain"
+                   onchange="if(this.files[0]) _handleFileSelection(this.files[0])">
             <div id="replyBar" style="display:none;" class="reply-bar">
                 <span class="reply-bar-label">↩ Replying to</span>
                 <span id="replyBarText" class="reply-bar-text"></span>
                 <button class="reply-cancel-btn" onclick="cancelReply()">×</button>
+            </div>
+            <div id="filePreviewBar" class="reply-bar" style="display:none">
+                <div class="reply-bar-content">
+                    <span id="filePreviewIcon" class="file-icon"></span>
+                    <span id="filePreviewText"></span>
+                </div>
+                <button class="reply-cancel-btn" onclick="cancelFileAttachment()">&times;</button>
             </div>
             <div class="chat-ttl-warning">⚠ Messages expire after 12 hours if unread</div>
             <div id="slashCmdPopup" class="slash-cmd-popup"></div>
@@ -1024,6 +1161,9 @@ a { color: inherit; text-decoration: none; }
             <div class="chat-input-row">
                 <button class="emoji-btn" onclick="toggleEmojiPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
                 <button class="slash-btn" onclick="toggleSlashPopup()" title="Commands">/</button>
+                <button class="attach-btn" onclick="openFilePicker()" title="Attach file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.49"/></svg>
+                </button>
                 <textarea id="chatInput" class="chat-input" rows="1"
                     placeholder="Message..."
                     oninput="onChatInput()"
@@ -1096,9 +1236,13 @@ a { color: inherit; text-decoration: none; }
 
 <!-- BUBBLE CONTEXT MENU -->
 <div id="bubbleContextMenu" class="context-menu">
-    <div class="context-menu-item" onclick="doCopyBubble()">
+    <div id="bubbleCopyText" class="context-menu-item" onclick="doCopyBubble()">
         <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
         Copy text
+    </div>
+    <div id="bubbleSaveFile" class="context-menu-item" style="display:none" onclick="doSaveFileBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        Save file
     </div>
     <div class="context-menu-item" onclick="doReplyBubble()">
         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -1164,15 +1308,60 @@ a { color: inherit; text-decoration: none; }
     </div>
 </div>
 
+<!-- LIGHTBOX MODAL -->
+<div id="lightboxModal" class="lightbox-overlay" onclick="closeLightbox()">
+    <img id="lightboxImg" class="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+    <div class="lightbox-controls" onclick="event.stopPropagation()">
+        <button class="lightbox-action-btn" onclick="copyLightboxImage()">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
+            Copy
+        </button>
+    </div>
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+</div>
+
 <!-- ==================== JAVASCRIPT ==================== -->
 <script>
 "use strict";
 (() => {
+  var __async = (__this, __arguments, generator) => {
+    return new Promise((resolve, reject) => {
+      var fulfilled = (value) => {
+        try {
+          step(generator.next(value));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      var rejected = (value) => {
+        try {
+          step(generator.throw(value));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+      step((generator = generator.apply(__this, __arguments)).next());
+    });
+  };
+
   // src/js/config.js
   var PRIVIME_CID = "97db059a347227d2d71fd0cb7fb5d993343ab1540d2eaf40fe48d131b611635f";
   var GROTH_PER_BEAM = 1e8;
   var MAX_MSG_CHARS = 950;
   var MSG_REFRESH_MS = 2e3;
+  var MAX_FILE_SIZE = 5 * 1024 * 1024;
+  var IPFS_ADD_TIMEOUT = 6e4;
+  var IPFS_GET_TIMEOUT = 3e4;
+  var AUTO_DL_MAX_SIZE = 2 * 1024 * 1024;
+  var ALLOWED_MIME_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "application/pdf",
+    "text/plain"
+  ];
 
   // src/js/state.js
   var BEAM = null;
@@ -1292,6 +1481,22 @@ a { color: inherit; text-decoration: none; }
   function setForwardText(v) {
     forwardText = v;
   }
+  var forwardFile = null;
+  function setForwardFile(v) {
+    forwardFile = v;
+  }
+  var fileUploadInProgress = false;
+  function setFileUploadInProgress(v) {
+    fileUploadInProgress = v;
+  }
+  var pendingFile = null;
+  function setPendingFile(v) {
+    pendingFile = v;
+  }
+  var downloadedFiles = {};
+  function setDownloadedFile(cid, url) {
+    downloadedFiles[cid] = url;
+  }
 
   // src/js/helpers.js
   function extractError(r) {
@@ -1394,6 +1599,131 @@ a { color: inherit; text-decoration: none; }
   }
   function setSplashStatus(msg) {
     document.getElementById("splashStatus").textContent = msg;
+  }
+  function formatFileSize(bytes) {
+    if (!bytes || bytes <= 0) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
+  }
+  function isImageMime(mime) {
+    return mime && ["image/jpeg", "image/png", "image/gif", "image/webp"].indexOf(mime) !== -1;
+  }
+  function truncateFilename(name, max) {
+    if (!name || name.length <= max) return name || "";
+    var ext = name.lastIndexOf(".") !== -1 ? name.slice(name.lastIndexOf(".")) : "";
+    return name.substring(0, max - ext.length - 3) + "..." + ext;
+  }
+  var _viewerBlob = null;
+  var _viewerFilename = "";
+  function saveFileWithPicker(blob, filename) {
+    return __async(this, null, function* () {
+      if (window.showSaveFilePicker) {
+        try {
+          var ext = filename.lastIndexOf(".") !== -1 ? filename.slice(filename.lastIndexOf(".")) : "";
+          var opts = { suggestedName: filename };
+          if (ext) {
+            opts.types = [{ description: "File", accept: {} }];
+            opts.types[0].accept[blob.type || "application/octet-stream"] = [ext];
+          }
+          var handle = yield window.showSaveFilePicker(opts);
+          var writable = yield handle.createWritable();
+          yield writable.write(blob);
+          yield writable.close();
+          showToast("File saved: " + filename, "success");
+          return;
+        } catch (err) {
+          if (err.name === "AbortError") return;
+        }
+      }
+      openFileViewer(blob, filename);
+    });
+  }
+  function openFileViewer(blob, filename) {
+    var existing = document.getElementById("fileViewerOverlay");
+    if (existing) existing.remove();
+    _viewerBlob = blob;
+    _viewerFilename = filename;
+    var mime = blob.type || "";
+    var blobUrl = URL.createObjectURL(blob);
+    var overlay = document.createElement("div");
+    overlay.id = "fileViewerOverlay";
+    overlay.className = "file-viewer-overlay";
+    var header = '<div class="file-viewer-header"><button class="file-viewer-close" onclick="closeFileViewer()">&times;</button><span class="file-viewer-name">' + escHtml(filename) + '</span><button class="file-viewer-save-btn" onclick="viewerCopyOrSave()">Copy</button></div>';
+    var content = "";
+    if (mime === "application/pdf") {
+      content = '<iframe class="file-viewer-frame" src="' + blobUrl + '#toolbar=1"></iframe>';
+    } else if (mime && mime.indexOf("image/") === 0) {
+      content = '<div class="file-viewer-img-wrap"><img class="file-viewer-img" src="' + blobUrl + '"></div>';
+    } else if (mime === "text/plain") {
+      var reader = new FileReader();
+      reader.onload = function() {
+        var pre = document.getElementById("fileViewerTextContent");
+        if (pre) pre.textContent = reader.result;
+      };
+      reader.readAsText(blob);
+      content = '<pre class="file-viewer-text" id="fileViewerTextContent">Loading...</pre>';
+    } else {
+      content = '<div class="file-viewer-text" style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:16px;">\u{1F4CE}</div><div>' + escHtml(filename) + "</div></div>";
+    }
+    overlay.innerHTML = header + '<div class="file-viewer-body">' + content + "</div>";
+    document.body.appendChild(overlay);
+  }
+  function closeFileViewer() {
+    var el = document.getElementById("fileViewerOverlay");
+    if (el) el.remove();
+    _viewerBlob = null;
+    _viewerFilename = "";
+  }
+  function viewerCopyOrSave() {
+    return __async(this, null, function* () {
+      if (!_viewerBlob) return;
+      var mime = _viewerBlob.type || "";
+      if (mime.indexOf("image/") === 0) {
+        try {
+          var img = new Image();
+          var blobUrl = URL.createObjectURL(_viewerBlob);
+          img.src = blobUrl;
+          yield new Promise(function(r) {
+            img.onload = r;
+          });
+          var canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext("2d").drawImage(img, 0, 0);
+          URL.revokeObjectURL(blobUrl);
+          var pngBlob = yield new Promise(function(r) {
+            canvas.toBlob(r, "image/png");
+          });
+          yield navigator.clipboard.write([
+            new ClipboardItem({ "image/png": pngBlob })
+          ]);
+          showToast("Image copied to clipboard", "success");
+          return;
+        } catch (err) {
+        }
+      }
+      if (mime === "text/plain") {
+        try {
+          var text = yield _viewerBlob.text();
+          yield navigator.clipboard.writeText(text);
+          showToast("Text copied to clipboard", "success");
+          return;
+        } catch (err) {
+        }
+      }
+      var url = URL.createObjectURL(_viewerBlob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = _viewerFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() {
+        URL.revokeObjectURL(url);
+      }, 5e3);
+      showToast("Download attempted \u2014 check your Downloads folder", "info");
+    });
   }
 
   // src/js/wallet-api.js
@@ -1780,6 +2110,328 @@ a { color: inherit; text-decoration: none; }
     });
   }
 
+  // src/js/crypto.js
+  function bufToHex(buf) {
+    return Array.from(new Uint8Array(buf)).map(function(b) {
+      return b.toString(16).padStart(2, "0");
+    }).join("");
+  }
+  function hexToBuf(hex) {
+    var bytes = new Uint8Array(hex.length / 2);
+    for (var i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+    }
+    return bytes;
+  }
+  function generateFileKey() {
+    return __async(this, null, function* () {
+      var key = yield crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 },
+        true,
+        // extractable (needed for hex export)
+        ["encrypt", "decrypt"]
+      );
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      var rawKey = yield crypto.subtle.exportKey("raw", key);
+      return {
+        key,
+        iv,
+        keyHex: bufToHex(rawKey),
+        ivHex: bufToHex(iv)
+      };
+    });
+  }
+  function encryptFile(plaintext, key, iv) {
+    return __async(this, null, function* () {
+      return crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+    });
+  }
+  function decryptFile(ciphertext, keyHex, ivHex) {
+    return __async(this, null, function* () {
+      var rawKey = hexToBuf(keyHex);
+      var iv = hexToBuf(ivHex);
+      var key = yield crypto.subtle.importKey(
+        "raw",
+        rawKey,
+        "AES-GCM",
+        false,
+        ["decrypt"]
+      );
+      return crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
+    });
+  }
+
+  // src/js/file-sharing.js
+  function openFilePicker() {
+    if (!activeChat || !myHandle) return;
+    var input = document.getElementById("filePickerInput");
+    if (!input) return;
+    input.value = "";
+    input.click();
+  }
+  function handleFileSelection(file) {
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) {
+      showToast("File too large (max " + formatFileSize(MAX_FILE_SIZE) + ")", "warning");
+      return;
+    }
+    if (ALLOWED_MIME_TYPES.indexOf(file.type) === -1) {
+      showToast("Unsupported file type: " + (file.type || "unknown"), "warning");
+      return;
+    }
+    setPendingFile(file);
+    showFilePreviewBar(file);
+  }
+  function showFilePreviewBar(file) {
+    var bar = document.getElementById("filePreviewBar");
+    if (!bar) return;
+    var icon = document.getElementById("filePreviewIcon");
+    var text = document.getElementById("filePreviewText");
+    if (icon) icon.textContent = isImageMime(file.type) ? "\u{1F5BC}" : "\u{1F4CE}";
+    if (text) text.textContent = truncateFilename(file.name, 30) + " (" + formatFileSize(file.size) + ")";
+    bar.style.display = "flex";
+    var input = document.getElementById("chatInput");
+    if (input) {
+      input.placeholder = "Add a caption...";
+      input.focus();
+    }
+  }
+  function cancelFileAttachment() {
+    setPendingFile(null);
+    var bar = document.getElementById("filePreviewBar");
+    if (bar) bar.style.display = "none";
+    var input = document.getElementById("chatInput");
+    if (input) input.placeholder = "Message...";
+  }
+  function sendFile(file, caption) {
+    return __async(this, null, function* () {
+      if (fileUploadInProgress) {
+        showToast("Upload already in progress", "warning");
+        return;
+      }
+      var convKey = activeChat;
+      var receiver = contacts[activeChat] && contacts[activeChat].wallet_id;
+      if (!receiver || !isValidWalletId(receiver)) {
+        showToast("Recipient address not resolved", "warning");
+        return;
+      }
+      setFileUploadInProgress(true);
+      showToast("Encrypting...", "info");
+      try {
+        var plaintext = yield file.arrayBuffer();
+        var ck = yield generateFileKey();
+        var ciphertext = yield encryptFile(plaintext, ck.key, ck.iv);
+        showToast("Uploading to IPFS...", "info");
+        var uint8Arr = Array.from(new Uint8Array(ciphertext));
+        var ipfsCid = yield new Promise(function(resolve, reject) {
+          callApi("ipfs_add", {
+            data: uint8Arr,
+            pin: true,
+            timeout: IPFS_ADD_TIMEOUT
+          }, function(result) {
+            if (result && result.error) {
+              reject(new Error(extractError(result)));
+            } else if (result && result.hash) {
+              resolve(result.hash);
+            } else {
+              reject(new Error("No IPFS hash returned"));
+            }
+          });
+        });
+        var ts = Math.floor(Date.now() / 1e3);
+        var fileMeta = {
+          cid: ipfsCid,
+          key: ck.keyHex,
+          iv: ck.ivHex,
+          name: truncateFilename(file.name, 60),
+          size: file.size,
+          mime: file.type
+        };
+        var msgObj = {
+          v: 1,
+          t: "file",
+          ts,
+          from: myHandle.handle,
+          dn: myHandle.display_name || "",
+          to: activeChat.startsWith("@") ? activeChat.slice(1) : contacts[activeChat] && contacts[activeChat].handle
+        };
+        if (caption) msgObj.msg = caption;
+        msgObj.file = fileMeta;
+        if (!conversations[convKey]) conversations[convKey] = [];
+        conversations[convKey].push({
+          text: caption || "",
+          ts,
+          sent: true,
+          file: fileMeta
+        });
+        saveToStorage();
+        renderChatMessages(convKey);
+        sendSbbsMessage(receiver, msgObj, function(result) {
+          if (result && result.error) {
+            conversations[convKey] = conversations[convKey].filter(function(m) {
+              return !(m.sent && m.ts === ts && m.file && m.file.cid === ipfsCid);
+            });
+            saveToStorage();
+            renderChatMessages(convKey);
+            showToast("Send failed: " + extractError(result), "error");
+          } else {
+            showToast("File sent", "success");
+            setTimeout(function() {
+              sendSbbsMessage(receiver, msgObj, function() {
+              });
+            }, 5e3);
+            setTimeout(function() {
+              sendSbbsMessage(receiver, msgObj, function() {
+              });
+            }, 1e4);
+          }
+        });
+      } catch (err) {
+        showToast("File send failed: " + (err.message || err), "error");
+      } finally {
+        setFileUploadInProgress(false);
+      }
+    });
+  }
+  function onFileAction(event, idx) {
+    event.stopPropagation();
+    var msgs = conversations[activeChat] || [];
+    var msg = msgs[idx];
+    if (!msg || !msg.file) return;
+    var bubbleEl = event.target.closest(".msg-bubble");
+    downloadAndDecryptFile(msg.file, bubbleEl);
+  }
+  function downloadAndDecryptFile(fileInfo, bubbleEl) {
+    return __async(this, null, function* () {
+      if (downloadedFiles[fileInfo.cid]) {
+        if (isImageMime(fileInfo.mime)) {
+          showInlineImage(downloadedFiles[fileInfo.cid], bubbleEl);
+        } else {
+          triggerDownloadFromUrl(downloadedFiles[fileInfo.cid], fileInfo.name, fileInfo.mime);
+        }
+        return;
+      }
+      var actionEl = bubbleEl ? bubbleEl.querySelector(".file-action") : null;
+      if (actionEl) actionEl.textContent = "Downloading...";
+      try {
+        var result = yield new Promise(function(resolve, reject) {
+          callApi("ipfs_get", {
+            hash: fileInfo.cid,
+            timeout: IPFS_GET_TIMEOUT
+          }, function(res) {
+            if (res && res.error) {
+              reject(new Error(extractError(res)));
+            } else if (res && res.data) {
+              resolve(res.data);
+            } else {
+              reject(new Error("No data returned from IPFS"));
+            }
+          });
+        });
+        if (actionEl) actionEl.textContent = "Decrypting...";
+        var cipherBuf = new Uint8Array(result).buffer;
+        var plaintext = yield decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
+        var blob = new Blob([plaintext], { type: fileInfo.mime });
+        var blobUrl = URL.createObjectURL(blob);
+        setDownloadedFile(fileInfo.cid, blobUrl);
+        if (isImageMime(fileInfo.mime)) {
+          showInlineImage(blobUrl, bubbleEl);
+        } else {
+          triggerDownloadFromUrl(blobUrl, fileInfo.name, fileInfo.mime);
+          if (actionEl) actionEl.textContent = "Download";
+        }
+      } catch (err) {
+        if (actionEl) actionEl.textContent = "Retry";
+        showToast("Download failed: " + (err.message || err), "error");
+      }
+    });
+  }
+  function showInlineImage(blobUrl, bubbleEl) {
+    if (!bubbleEl) return;
+    var preview = bubbleEl.querySelector(".file-preview");
+    if (preview) {
+      preview.innerHTML = '<img src="' + blobUrl + '" class="file-inline-img" onclick="openLightbox(this.src)">';
+    }
+    var actionEl = bubbleEl.querySelector(".file-action");
+    if (actionEl) actionEl.style.display = "none";
+  }
+  function triggerDownloadFromUrl(blobUrl, filename, mime) {
+    return __async(this, null, function* () {
+      var resp = yield fetch(blobUrl);
+      var blob = yield resp.blob();
+      saveFileWithPicker(blob, filename);
+    });
+  }
+  var autoDownloadPending = {};
+  function autoDownloadImages() {
+    var bubbles = document.querySelectorAll(".msg-bubble.file");
+    bubbles.forEach(function(bubble) {
+      var cidAttr = bubble.getAttribute("data-cid");
+      if (!cidAttr) return;
+      if (downloadedFiles[cidAttr] || autoDownloadPending[cidAttr]) return;
+      var mimeAttr = bubble.getAttribute("data-mime");
+      var sizeAttr = parseInt(bubble.getAttribute("data-size"), 10);
+      if (!isImageMime(mimeAttr) || sizeAttr > AUTO_DL_MAX_SIZE) return;
+      if (bubble.querySelector(".file-inline-img")) return;
+      autoDownloadPending[cidAttr] = true;
+      var keyAttr = bubble.getAttribute("data-key");
+      var ivAttr = bubble.getAttribute("data-iv");
+      var nameAttr = bubble.getAttribute("data-name");
+      downloadAndDecryptFile({
+        cid: cidAttr,
+        key: keyAttr,
+        iv: ivAttr,
+        name: nameAttr,
+        size: sizeAttr,
+        mime: mimeAttr
+      }, bubble).finally(function() {
+        delete autoDownloadPending[cidAttr];
+      });
+    });
+  }
+  function openLightbox(src) {
+    var img = document.getElementById("lightboxImg");
+    var modal = document.getElementById("lightboxModal");
+    if (img) img.src = src;
+    if (modal) modal.classList.add("active");
+  }
+  function copyLightboxImage() {
+    return __async(this, null, function* () {
+      var img = document.getElementById("lightboxImg");
+      if (!img || !img.src) return;
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        var pngBlob = yield new Promise(function(r) {
+          canvas.toBlob(r, "image/png");
+        });
+        yield navigator.clipboard.write([
+          new ClipboardItem({ "image/png": pngBlob })
+        ]);
+        showToast("Image copied to clipboard", "success");
+      } catch (err) {
+        showToast("Could not copy image", "error");
+      }
+    });
+  }
+  function closeLightbox() {
+    var modal = document.getElementById("lightboxModal");
+    if (modal) modal.classList.remove("active");
+    var img = document.getElementById("lightboxImg");
+    if (img) img.src = "";
+  }
+  function doSaveFileBubble() {
+    if (!bubbleCtxMsg || !bubbleCtxMsg.file) return;
+    var bubbles = document.querySelectorAll(".msg-bubble");
+    var idx = Array.from(bubbles).findIndex(function(b) {
+      return b.getAttribute("data-cid") === bubbleCtxMsg.file.cid;
+    });
+    var bubbleEl = idx >= 0 ? bubbles[idx] : null;
+    downloadAndDecryptFile(bubbleCtxMsg.file, bubbleEl);
+  }
+
   // src/js/render-chat.js
   function renderChatMessages(walletId, forceScroll) {
     var msgs = conversations[walletId] || [];
@@ -1806,19 +2458,41 @@ a { color: inherit; text-decoration: none; }
         tickHtml = m.read ? ' <span class="msg-tick read">\u2713\u2713</span>' : ' <span class="msg-tick">\u2713</span>';
       }
       var bubbleContent;
+      var extraCls = "";
+      var extraAttrs = "";
       if (m.isTip) {
         var tipBeam = m.tipAmount ? (m.tipAmount / GROTH_PER_BEAM).toFixed(8).replace(/\.?0+$/, "") : "?";
         var tipVerb = m.sent ? "Sent" : "Received";
         bubbleContent = '<div class="tip-bubble-inner"><span class="tip-icon">\u{1F48E}</span> ' + tipVerb + '&nbsp; <span class="tip-amount">' + tipBeam + " BEAM</span></div>";
+        extraCls = " tip";
+      } else if (m.file) {
+        extraCls = " file";
+        extraAttrs = ' data-cid="' + escAttr(m.file.cid) + '" data-key="' + escAttr(m.file.key) + '" data-iv="' + escAttr(m.file.iv) + '" data-mime="' + escAttr(m.file.mime) + '" data-size="' + m.file.size + '" data-name="' + escAttr(m.file.name) + '"';
+        var fileIcon = isImageMime(m.file.mime) ? "\u{1F5BC}" : "\u{1F4CE}";
+        var sizeStr = formatFileSize(m.file.size);
+        var nameStr = escHtml(truncateFilename(m.file.name, 40));
+        var cached = downloadedFiles[m.file.cid];
+        var previewHtml;
+        if (cached && isImageMime(m.file.mime)) {
+          previewHtml = '<img src="' + cached + '" class="file-inline-img" onclick="openLightbox(this.src)">';
+        } else if (isImageMime(m.file.mime)) {
+          previewHtml = '<div class="file-loading-spinner"></div>';
+        } else {
+          previewHtml = "";
+        }
+        var actionStyle = cached && isImageMime(m.file.mime) ? ' style="display:none"' : "";
+        var actionLabel = isImageMime(m.file.mime) ? "View" : "Download";
+        bubbleContent = '<div class="file-bubble-inner"><div class="file-preview">' + previewHtml + '</div><div class="file-info-row"><span class="file-icon">' + fileIcon + '</span><div class="file-details"><div class="file-name">' + nameStr + '</div><div class="file-size">' + sizeStr + '</div></div><button class="file-action"' + actionStyle + ' onclick="onFileAction(event,' + i + ')">' + actionLabel + "</button></div>" + (m.text ? '<div class="file-caption">' + escHtml(m.text) + "</div>" : "") + "</div>";
       } else {
         bubbleContent = replyHtml + escHtml(m.text);
       }
-      html.push('<div class="msg-bubble ' + cls + (m.isTip ? " tip" : "") + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' + bubbleContent + '<div class="msg-time">' + time + tickHtml + "</div></div>");
+      html.push('<div class="msg-bubble ' + cls + extraCls + '"' + extraAttrs + ' oncontextmenu="showBubbleMenu(event,' + i + ')">' + bubbleContent + '<div class="msg-time">' + time + tickHtml + "</div></div>");
     });
     el.innerHTML = html.join("");
     if (wasAtBottom) {
       el.scrollTop = el.scrollHeight;
     }
+    autoDownloadImages();
   }
 
   // src/js/render-home.js
@@ -1854,7 +2528,12 @@ a { color: inherit; text-decoration: none; }
       var name = contact.display_name || "";
       var last = lastMessage(conversations[wid]);
       var unread = unreadCounts[wid] || 0;
-      var preview = last ? escHtml(last.text.substring(0, 60)) : "";
+      var preview = "";
+      if (last && last.file) {
+        preview = "\u{1F4CE} " + escHtml(last.file.name || "File");
+      } else if (last) {
+        preview = escHtml(last.text.substring(0, 60));
+      }
       var timeStr = last ? formatTs(last.ts) : "";
       var initial = handle.charAt(0).toUpperCase();
       var badge = unread > 0 ? '<span class="unread-badge">' + Math.min(unread, 9) + "</span>" : "";
@@ -1988,19 +2667,12 @@ a { color: inherit; text-decoration: none; }
     msgs.forEach(function(m) {
       var who = m.sent ? myHandle ? "@" + myHandle.handle : "Me" : "@" + handle;
       var time = new Date(m.ts * 1e3).toLocaleString();
-      lines.push("[" + time + "] " + who + ": " + m.text);
+      var content = m.file ? "[File: " + (m.file.name || "file") + " (" + formatFileSize(m.file.size) + ")]" + (m.text ? " " + m.text : "") : m.text;
+      lines.push("[" + time + "] " + who + ": " + content);
     });
     var text = lines.join("\n");
     var blob = new Blob([text], { type: "text/plain" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "privime-chat-" + handle + ".txt";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast("Chat exported", "success");
+    saveFileWithPicker(blob, "privime-chat-" + handle + ".txt");
   }
 
   // src/js/chat-search.js
@@ -2033,10 +2705,11 @@ a { color: inherit; text-decoration: none; }
     chatSearchMatches = [];
     if (q.length > 0) {
       msgs.forEach(function(m, i) {
-        var idx = m.text.toLowerCase().indexOf(q);
+        var searchText = m.file ? m.file.name || "" : m.text;
+        var idx = searchText.toLowerCase().indexOf(q);
         while (idx !== -1) {
           chatSearchMatches.push({ msgIdx: i, startIdx: idx });
-          idx = m.text.toLowerCase().indexOf(q, idx + 1);
+          idx = searchText.toLowerCase().indexOf(q, idx + 1);
         }
       });
     }
@@ -2094,13 +2767,28 @@ a { color: inherit; text-decoration: none; }
       if (m.sent) {
         tickHtml = m.read ? ' <span class="msg-tick read">\u2713\u2713</span>' : ' <span class="msg-tick">\u2713</span>';
       }
-      var textHtml;
-      if (matchByMsg[i]) {
-        textHtml = highlightText(m.text, matchByMsg[i]);
+      var bubbleContent;
+      if (m.file) {
+        var fileIcon = isImageMime(m.file.mime) ? "\u{1F5BC}" : "\u{1F4CE}";
+        var sizeStr = formatFileSize(m.file.size);
+        var nameStr = escHtml(truncateFilename(m.file.name, 40));
+        var cached = downloadedFiles[m.file.cid];
+        var previewHtml = "";
+        if (cached && isImageMime(m.file.mime)) {
+          previewHtml = '<img src="' + cached + '" class="file-inline-img">';
+        }
+        bubbleContent = '<div class="file-bubble-inner"><div class="file-preview">' + previewHtml + '</div><div class="file-info-row"><span class="file-icon">' + fileIcon + '</span><div class="file-details"><div class="file-name">' + nameStr + '</div><div class="file-size">' + sizeStr + "</div></div></div>" + (m.text ? '<div class="file-caption">' + escHtml(m.text) + "</div>" : "") + "</div>";
+        cls += " file";
       } else {
-        textHtml = escHtml(m.text);
+        var textHtml;
+        if (matchByMsg[i]) {
+          textHtml = highlightText(m.text, matchByMsg[i]);
+        } else {
+          textHtml = escHtml(m.text);
+        }
+        bubbleContent = replyHtml + textHtml;
       }
-      html.push('<div class="msg-bubble ' + cls + '" id="msg-' + i + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' + replyHtml + textHtml + '<div class="msg-time">' + time + tickHtml + "</div></div>");
+      html.push('<div class="msg-bubble ' + cls + '" id="msg-' + i + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' + bubbleContent + '<div class="msg-time">' + time + tickHtml + "</div></div>");
     });
     el.innerHTML = html.join("");
     if (currentMatch) {
@@ -2136,7 +2824,7 @@ a { color: inherit; text-decoration: none; }
     var cc = document.getElementById("charCount");
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 120) + "px";
-    btn.disabled = len === 0 || len > MAX_MSG_CHARS;
+    btn.disabled = len === 0 && !pendingFile || len > MAX_MSG_CHARS;
     if (text.startsWith("/") && !text.includes("\n")) {
       openSlashPopup(text);
     } else if (slashPopupOpen) {
@@ -2199,6 +2887,17 @@ a { color: inherit; text-decoration: none; }
     closeSlashPopup();
     var input = document.getElementById("chatInput");
     var text = input.value.trim();
+    if (pendingFile && activeChat && myWalletId) {
+      var file = pendingFile;
+      var caption = text || "";
+      cancelFileAttachment();
+      input.value = "";
+      input.style.height = "auto";
+      document.getElementById("charCount").textContent = "";
+      document.getElementById("sendBtn").disabled = true;
+      sendFile(file, caption);
+      return;
+    }
     if (!text || !activeChat || !myWalletId) return;
     if (text.startsWith("/")) {
       if (handleSlashCommand(text)) {
@@ -2605,7 +3304,7 @@ a { color: inherit; text-decoration: none; }
         }
         return;
       }
-      if (payload.t !== "dm" && payload.t !== "tip") return;
+      if (payload.t !== "dm" && payload.t !== "tip" && payload.t !== "file") return;
       if (payload.from && isBlocked(payload.from.replace(/^@/, "").toLowerCase())) return;
       var senderWalletId = (m.sender || m.from || "").trim();
       if (!senderWalletId) return;
@@ -2646,14 +3345,33 @@ a { color: inherit; text-decoration: none; }
       var tombstoneTs = deletedConvs[convKey];
       if (tombstoneTs && ts <= tombstoneTs) return;
       if (!conversations[convKey]) conversations[convKey] = [];
-      var exists = conversations[convKey].some(function(x) {
-        return x.ts === ts && x.text === text && x.sent === sent;
-      });
+      var exists;
+      if (payload.t === "file" && payload.file) {
+        var fileCid = payload.file.cid;
+        exists = conversations[convKey].some(function(x) {
+          return x.ts === ts && x.sent === sent && x.file && x.file.cid === fileCid;
+        });
+      } else {
+        exists = conversations[convKey].some(function(x) {
+          return x.ts === ts && x.text === text && x.sent === sent;
+        });
+      }
       if (!exists) {
         var msgData = { text, ts, sent, reply: payload.reply || null };
         if (payload.t === "tip") {
           msgData.isTip = true;
           msgData.tipAmount = payload.amount || 0;
+        }
+        if (payload.t === "file" && payload.file) {
+          msgData.file = {
+            cid: payload.file.cid || "",
+            key: payload.file.key || "",
+            iv: payload.file.iv || "",
+            name: payload.file.name || "file",
+            size: payload.file.size || 0,
+            mime: payload.file.mime || "application/octet-stream"
+          };
+          msgData.text = payload.msg || "";
         }
         conversations[convKey].push(msgData);
         if (!sent && convKey !== activeChat) {
@@ -3203,6 +3921,11 @@ a { color: inherit; text-decoration: none; }
     setBubbleCtxMsg(chatMsgCache[idx] || null);
     setBubbleCtxWid(activeChat);
     var menu = document.getElementById("bubbleContextMenu");
+    var copyItem = document.getElementById("bubbleCopyText");
+    var saveItem = document.getElementById("bubbleSaveFile");
+    var isFile = !!(bubbleCtxMsg && bubbleCtxMsg.file);
+    if (copyItem) copyItem.style.display = isFile ? "none" : "";
+    if (saveItem) saveItem.style.display = isFile ? "" : "none";
     var x = Math.min(e.clientX, window.innerWidth - 190);
     var y = Math.min(e.clientY, window.innerHeight - 150);
     menu.style.left = x + "px";
@@ -3219,16 +3942,18 @@ a { color: inherit; text-decoration: none; }
   function doReplyBubble() {
     hideBubbleMenu();
     if (!bubbleCtxMsg) return;
-    setReplyTo({ text: bubbleCtxMsg.text });
+    var replyText = bubbleCtxMsg.file ? "\u{1F4CE} " + (bubbleCtxMsg.file.name || "File") : bubbleCtxMsg.text;
+    setReplyTo({ text: replyText });
     var bar = document.getElementById("replyBar");
     bar.style.display = "flex";
-    document.getElementById("replyBarText").textContent = bubbleCtxMsg.text;
+    document.getElementById("replyBarText").textContent = replyText;
     document.getElementById("chatInput").focus();
   }
   function doForwardBubble() {
     hideBubbleMenu();
     if (!bubbleCtxMsg) return;
     setForwardText(bubbleCtxMsg.text);
+    setForwardFile(bubbleCtxMsg.file || null);
     setForwardMode(true);
     showForwardModal();
   }
@@ -3244,6 +3969,7 @@ a { color: inherit; text-decoration: none; }
     document.getElementById("forwardModal").classList.remove("active");
     setForwardMode(false);
     setForwardText(null);
+    setForwardFile(null);
   }
   function onForwardSearch(val) {
     var q = val.trim().toLowerCase().replace(/^@/, "");
@@ -3279,33 +4005,50 @@ a { color: inherit; text-decoration: none; }
     }
   }
   function doForwardTo(wid) {
-    if (!forwardText) {
+    if (!forwardText && !forwardFile) {
       closeForwardModal();
       return;
     }
     var text = forwardText;
+    var fileMeta = forwardFile;
     closeForwardModal();
     showChatPage(wid);
     var receiver = contacts[wid] && contacts[wid].wallet_id;
     if (!receiver || !isValidWalletId(receiver)) {
-      document.getElementById("chatInput").value = text;
-      onChatInput();
+      if (!fileMeta) {
+        document.getElementById("chatInput").value = text;
+        onChatInput();
+      }
       showToast("Address not resolved \u2014 message pre-filled", "warning");
       return;
     }
-    var msgObj = { v: 1, t: "dm", msg: text, ts: Math.floor(Date.now() / 1e3) };
-    if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
-    if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+    var ts = Math.floor(Date.now() / 1e3);
     var recipientHandle = wid.startsWith("@") ? wid.slice(1) : contacts[wid] && contacts[wid].handle;
-    if (recipientHandle) msgObj.to = recipientHandle;
-    if (!conversations[wid]) conversations[wid] = [];
-    conversations[wid].push({ text, ts: msgObj.ts, sent: true, reply: null });
+    var msgObj;
+    if (fileMeta) {
+      msgObj = { v: 1, t: "file", ts };
+      if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+      if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+      if (recipientHandle) msgObj.to = recipientHandle;
+      msgObj.file = fileMeta;
+      if (text) msgObj.msg = text;
+      if (!conversations[wid]) conversations[wid] = [];
+      conversations[wid].push({ text: text || "", ts, sent: true, file: fileMeta });
+    } else {
+      msgObj = { v: 1, t: "dm", msg: text, ts };
+      if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+      if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+      if (recipientHandle) msgObj.to = recipientHandle;
+      if (!conversations[wid]) conversations[wid] = [];
+      conversations[wid].push({ text, ts, sent: true, reply: null });
+    }
     saveToStorage();
     renderChatMessages(wid);
     sendSbbsMessage(receiver, msgObj, function(result) {
       if (result && result.error) {
         conversations[wid] = conversations[wid].filter(function(m) {
-          return !(m.sent && m.ts === msgObj.ts && m.text === text);
+          if (fileMeta) return !(m.sent && m.ts === ts && m.file && m.file.cid === fileMeta.cid);
+          return !(m.sent && m.ts === ts && m.text === text);
         });
         saveToStorage();
         renderChatMessages(wid);
@@ -3330,6 +4073,9 @@ a { color: inherit; text-decoration: none; }
     if (!convs) return;
     var msg = bubbleCtxMsg;
     conversations[bubbleCtxWid] = convs.filter(function(m) {
+      if (msg.file) {
+        return !(m.ts === msg.ts && m.sent === msg.sent && m.file && m.file.cid === msg.file.cid);
+      }
       return !(m.ts === msg.ts && m.text === msg.text && m.sent === msg.sent);
     });
     saveToStorage();
@@ -3359,6 +4105,7 @@ a { color: inherit; text-decoration: none; }
         hideKebabMenu();
         closeChatSearch();
         closeForwardModal();
+        closeLightbox();
         document.getElementById("confirmModal").classList.remove("active");
       }
     });
@@ -3533,6 +4280,16 @@ a { color: inherit; text-decoration: none; }
   window.confirmReleaseHandle = confirmReleaseHandle;
   window.onUpdateWalletIdInput = onUpdateWalletIdInput;
   window.tryAutoFillUpdateAddr = tryAutoFillUpdateAddr;
+  window.openFilePicker = openFilePicker;
+  window._handleFileSelection = handleFileSelection;
+  window.onFileAction = onFileAction;
+  window.openLightbox = openLightbox;
+  window.closeLightbox = closeLightbox;
+  window.copyLightboxImage = copyLightboxImage;
+  window.cancelFileAttachment = cancelFileAttachment;
+  window.doSaveFileBubble = doSaveFileBubble;
+  window.closeFileViewer = closeFileViewer;
+  window.viewerCopyOrSave = viewerCopyOrSave;
   window.copyToClipboard = copyToClipboard;
   function init() {
     setupGlobalListeners();

@@ -2,7 +2,7 @@
 
 import { MAX_MSG_CHARS } from './config.js';
 import { activeChat, myHandle, myWalletId, contacts, conversations,
-         replyTo, setReplyTo } from './state.js';
+         replyTo, setReplyTo, pendingFile } from './state.js';
 import { showToast, extractError } from './helpers.js';
 import { saveToStorage } from './storage.js';
 import { sendSbbsMessage } from './sbbs.js';
@@ -11,6 +11,7 @@ import { isValidWalletId } from './registration.js';
 import { resolveHandleIntoContact } from './contacts.js';
 import { handleSlashCommand, openSlashPopup, closeSlashPopup, slashPopupOpen, slashSelectedIdx, setSlashSelectedIdx } from './slash-commands.js';
 import { closeEmojiPanel } from './emoji.js';
+import { sendFile, cancelFileAttachment } from './file-sharing.js';
 
 // ================================================================
 // CHAT INPUT
@@ -26,7 +27,7 @@ export function onChatInput() {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
 
-    btn.disabled = (len === 0 || len > MAX_MSG_CHARS);
+    btn.disabled = (len === 0 && !pendingFile) || len > MAX_MSG_CHARS;
 
     // Slash command detection -- show popup when input starts with /
     if (text.startsWith('/') && !text.includes('\n')) {
@@ -94,6 +95,20 @@ export function doSendMessage() {
     closeSlashPopup();
     var input  = document.getElementById('chatInput');
     var text   = input.value.trim();
+
+    // File send flow -- if a file is pending, send it with optional caption
+    if (pendingFile && activeChat && myWalletId) {
+        var file = pendingFile;
+        var caption = text || '';
+        cancelFileAttachment();
+        input.value = '';
+        input.style.height = 'auto';
+        document.getElementById('charCount').textContent = '';
+        document.getElementById('sendBtn').disabled = true;
+        sendFile(file, caption);
+        return;
+    }
+
     if (!text || !activeChat || !myWalletId) return;
 
     // Intercept slash commands -- don't send as message

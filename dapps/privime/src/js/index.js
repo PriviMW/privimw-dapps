@@ -11,7 +11,7 @@ import './config.js';
 import './state.js';
 
 // Helpers
-import { copyToClipboard } from './helpers.js';
+import { copyToClipboard, closeFileViewer, viewerCopyOrSave } from './helpers.js';
 
 // Wallet API (no direct window exports)
 import './wallet-api.js';
@@ -80,6 +80,14 @@ import { showEditDisplayName, hideEditDisplayName, doSaveDisplayName,
 
 // Wallet connection
 import { detectAndConnect } from './wallet-connect.js';
+
+// File sharing
+import { openFilePicker, handleFileSelection, onFileAction,
+         openLightbox, closeLightbox, copyLightboxImage,
+         cancelFileAttachment, doSaveFileBubble } from './file-sharing.js';
+
+// Crypto (no direct window exports)
+import './crypto.js';
 
 // Startup (side-effect: registers event handlers with wallet-api.js)
 import './startup.js';
@@ -173,6 +181,20 @@ window.doUpdateAddress = doUpdateAddress;
 window.confirmReleaseHandle = confirmReleaseHandle;
 window.onUpdateWalletIdInput = onUpdateWalletIdInput;
 window.tryAutoFillUpdateAddr = tryAutoFillUpdateAddr;
+
+// File sharing
+window.openFilePicker = openFilePicker;
+window._handleFileSelection = handleFileSelection;
+window.onFileAction = onFileAction;
+window.openLightbox = openLightbox;
+window.closeLightbox = closeLightbox;
+window.copyLightboxImage = copyLightboxImage;
+window.cancelFileAttachment = cancelFileAttachment;
+window.doSaveFileBubble = doSaveFileBubble;
+
+// File viewer
+window.closeFileViewer = closeFileViewer;
+window.viewerCopyOrSave = viewerCopyOrSave;
 
 // Helpers (used in dynamic innerHTML)
 window.copyToClipboard = copyToClipboard;

@@ -1,8 +1,10 @@
 'use strict';
 
 import { GROTH_PER_BEAM } from './config.js';
-import { conversations, setChatMsgCache } from './state.js';
-import { escHtml, formatTime, formatDateSep } from './helpers.js';
+import { conversations, setChatMsgCache, downloadedFiles } from './state.js';
+import { escHtml, escAttr, formatTime, formatDateSep,
+         formatFileSize, isImageMime, truncateFilename } from './helpers.js';
+import { autoDownloadImages } from './file-sharing.js';
 
 // ================================================================
 // CHAT RENDERING
@@ -41,6 +43,8 @@ export function renderChatMessages(walletId, forceScroll) {
                 : ' <span class="msg-tick">\u2713</span>';
         }
         var bubbleContent;
+        var extraCls = '';
+        var extraAttrs = '';
         if (m.isTip) {
             var tipBeam = m.tipAmount ? (m.tipAmount / GROTH_PER_BEAM).toFixed(8).replace(/\.?0+$/, '') : '?';
             var tipVerb = m.sent ? 'Sent' : 'Received';
@@ -48,10 +52,45 @@ export function renderChatMessages(walletId, forceScroll) {
                 '<span class="tip-icon">\u{1F48E}</span> ' +
                 tipVerb + '&nbsp; <span class="tip-amount">' + tipBeam + ' BEAM</span>' +
                 '</div>';
+            extraCls = ' tip';
+        } else if (m.file) {
+            extraCls = ' file';
+            extraAttrs = ' data-cid="' + escAttr(m.file.cid) + '"' +
+                ' data-key="' + escAttr(m.file.key) + '"' +
+                ' data-iv="' + escAttr(m.file.iv) + '"' +
+                ' data-mime="' + escAttr(m.file.mime) + '"' +
+                ' data-size="' + m.file.size + '"' +
+                ' data-name="' + escAttr(m.file.name) + '"';
+            var fileIcon = isImageMime(m.file.mime) ? '\u{1F5BC}' : '\u{1F4CE}';
+            var sizeStr = formatFileSize(m.file.size);
+            var nameStr = escHtml(truncateFilename(m.file.name, 40));
+            var cached = downloadedFiles[m.file.cid];
+            var previewHtml;
+            if (cached && isImageMime(m.file.mime)) {
+                previewHtml = '<img src="' + cached + '" class="file-inline-img" onclick="openLightbox(this.src)">';
+            } else if (isImageMime(m.file.mime)) {
+                previewHtml = '<div class="file-loading-spinner"></div>';
+            } else {
+                previewHtml = '';
+            }
+            var actionStyle = (cached && isImageMime(m.file.mime)) ? ' style="display:none"' : '';
+            var actionLabel = isImageMime(m.file.mime) ? 'View' : 'Download';
+            bubbleContent = '<div class="file-bubble-inner">' +
+                '<div class="file-preview">' + previewHtml + '</div>' +
+                '<div class="file-info-row">' +
+                '<span class="file-icon">' + fileIcon + '</span>' +
+                '<div class="file-details">' +
+                '<div class="file-name">' + nameStr + '</div>' +
+                '<div class="file-size">' + sizeStr + '</div>' +
+                '</div>' +
+                '<button class="file-action"' + actionStyle + ' onclick="onFileAction(event,' + i + ')">' + actionLabel + '</button>' +
+                '</div>' +
+                (m.text ? '<div class="file-caption">' + escHtml(m.text) + '</div>' : '') +
+                '</div>';
         } else {
             bubbleContent = replyHtml + escHtml(m.text);
         }
-        html.push('<div class="msg-bubble ' + cls + (m.isTip ? ' tip' : '') + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' +
+        html.push('<div class="msg-bubble ' + cls + extraCls + '"' + extraAttrs + ' oncontextmenu="showBubbleMenu(event,' + i + ')">' +
             bubbleContent +
             '<div class="msg-time">' + time + tickHtml + '</div>' +
         '</div>');
@@ -61,4 +100,7 @@ export function renderChatMessages(walletId, forceScroll) {
     if (wasAtBottom) {
         el.scrollTop = el.scrollHeight;
     }
+
+    // Auto-download small images after render
+    autoDownloadImages();
 }

@@ -3,7 +3,7 @@
 import { activeChat, contacts, conversations, unreadCounts, deletedConvs,
          chatMsgCache, bubbleCtxMsg, setBubbleCtxMsg,
          bubbleCtxWid, setBubbleCtxWid,
-         myHandle, forwardText, setForwardText,
+         myHandle, forwardText, setForwardText, forwardFile, setForwardFile,
          setForwardMode, setReplyTo,
          emojiPanelOpen } from './state.js';
 import { escHtml, escAttr, shortWalletId, showToast, extractError, copyToClipboard } from './helpers.js';
@@ -18,6 +18,7 @@ import { hideKebabMenu, kebabOpen } from './kebab.js';
 import { closeEmojiPanel } from './emoji.js';
 import { closeSlashPopup, slashPopupOpen } from './slash-commands.js';
 import { closeChatSearch } from './chat-search.js';
+import { closeLightbox, doSaveFileBubble } from './file-sharing.js';
 
 // ================================================================
 // CONTACT CONTEXT MENU
@@ -67,6 +68,12 @@ export function showBubbleMenu(e, idx) {
     setBubbleCtxMsg(chatMsgCache[idx] || null);
     setBubbleCtxWid(activeChat);
     var menu = document.getElementById('bubbleContextMenu');
+    // Toggle Copy text vs Save file visibility
+    var copyItem = document.getElementById('bubbleCopyText');
+    var saveItem = document.getElementById('bubbleSaveFile');
+    var isFile = !!(bubbleCtxMsg && bubbleCtxMsg.file);
+    if (copyItem) copyItem.style.display = isFile ? 'none' : '';
+    if (saveItem) saveItem.style.display = isFile ? '' : 'none';
     var x = Math.min(e.clientX, window.innerWidth - 190);
     var y = Math.min(e.clientY, window.innerHeight - 150);
     menu.style.left = x + 'px';
@@ -86,10 +93,13 @@ export function doCopyBubble() {
 export function doReplyBubble() {
     hideBubbleMenu();
     if (!bubbleCtxMsg) return;
-    setReplyTo({ text: bubbleCtxMsg.text });
+    var replyText = bubbleCtxMsg.file
+        ? '\u{1F4CE} ' + (bubbleCtxMsg.file.name || 'File')
+        : bubbleCtxMsg.text;
+    setReplyTo({ text: replyText });
     var bar = document.getElementById('replyBar');
     bar.style.display = 'flex';
-    document.getElementById('replyBarText').textContent = bubbleCtxMsg.text;
+    document.getElementById('replyBarText').textContent = replyText;
     document.getElementById('chatInput').focus();
 }
 
@@ -97,6 +107,7 @@ export function doForwardBubble() {
     hideBubbleMenu();
     if (!bubbleCtxMsg) return;
     setForwardText(bubbleCtxMsg.text);
+    setForwardFile(bubbleCtxMsg.file || null);
     setForwardMode(true);
     showForwardModal();
 }
@@ -112,6 +123,7 @@ export function closeForwardModal() {
     document.getElementById('forwardModal').classList.remove('active');
     setForwardMode(false);
     setForwardText(null);
+    setForwardFile(null);
 }
 
 export function onForwardSearch(val) {
@@ -163,8 +175,9 @@ function renderForwardContacts(filter) {
 }
 
 export function doForwardTo(wid) {
-    if (!forwardText) { closeForwardModal(); return; }
+    if (!forwardText && !forwardFile) { closeForwardModal(); return; }
     var text = forwardText;
+    var fileMeta = forwardFile;
     closeForwardModal();
     showChatPage(wid);
 
@@ -172,27 +185,46 @@ export function doForwardTo(wid) {
     var receiver = contacts[wid] && contacts[wid].wallet_id;
     if (!receiver || !isValidWalletId(receiver)) {
         // Pre-fill input instead if address not resolved
-        document.getElementById('chatInput').value = text;
-        onChatInput();
+        if (!fileMeta) {
+            document.getElementById('chatInput').value = text;
+            onChatInput();
+        }
         showToast('Address not resolved \u2014 message pre-filled', 'warning');
         return;
     }
 
-    var msgObj = { v: 1, t: 'dm', msg: text, ts: Math.floor(Date.now() / 1000) };
-    if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
-    if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+    var ts = Math.floor(Date.now() / 1000);
     var recipientHandle = wid.startsWith('@') ? wid.slice(1) : (contacts[wid] && contacts[wid].handle);
-    if (recipientHandle) msgObj.to = recipientHandle;
+    var msgObj;
 
-    if (!conversations[wid]) conversations[wid] = [];
-    conversations[wid].push({ text: text, ts: msgObj.ts, sent: true, reply: null });
+    if (fileMeta) {
+        // Forward file -- re-share same CID + decryption key
+        msgObj = { v: 1, t: 'file', ts: ts };
+        if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+        if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+        if (recipientHandle) msgObj.to = recipientHandle;
+        msgObj.file = fileMeta;
+        if (text) msgObj.msg = text;
+
+        if (!conversations[wid]) conversations[wid] = [];
+        conversations[wid].push({ text: text || '', ts: ts, sent: true, file: fileMeta });
+    } else {
+        msgObj = { v: 1, t: 'dm', msg: text, ts: ts };
+        if (myHandle && myHandle.handle) msgObj.from = myHandle.handle;
+        if (myHandle && myHandle.display_name) msgObj.dn = myHandle.display_name;
+        if (recipientHandle) msgObj.to = recipientHandle;
+
+        if (!conversations[wid]) conversations[wid] = [];
+        conversations[wid].push({ text: text, ts: ts, sent: true, reply: null });
+    }
     saveToStorage();
     renderChatMessages(wid);
 
     sendSbbsMessage(receiver, msgObj, function(result) {
         if (result && result.error) {
             conversations[wid] = conversations[wid].filter(function(m) {
-                return !(m.sent && m.ts === msgObj.ts && m.text === text);
+                if (fileMeta) return !(m.sent && m.ts === ts && m.file && m.file.cid === fileMeta.cid);
+                return !(m.sent && m.ts === ts && m.text === text);
             });
             saveToStorage();
             renderChatMessages(wid);
@@ -212,6 +244,9 @@ export function doDeleteBubble() {
     if (!convs) return;
     var msg = bubbleCtxMsg;
     conversations[bubbleCtxWid] = convs.filter(function(m) {
+        if (msg.file) {
+            return !(m.ts === msg.ts && m.sent === msg.sent && m.file && m.file.cid === msg.file.cid);
+        }
         return !(m.ts === msg.ts && m.text === msg.text && m.sent === msg.sent);
     });
     saveToStorage();
@@ -241,7 +276,7 @@ export function setupGlobalListeners() {
         if (e.key === 'Escape') {
             hideContextMenu(); hideBubbleMenu(); cancelReply(); closeEmojiPanel();
             closeSlashPopup(); hideKebabMenu(); closeChatSearch();
-            closeForwardModal();
+            closeForwardModal(); closeLightbox();
             document.getElementById('confirmModal').classList.remove('active');
         }
     });

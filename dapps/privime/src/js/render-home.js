@@ -43,7 +43,12 @@ export function renderContactList() {
         var name    = contact.display_name || '';
         var last    = lastMessage(conversations[wid]);
         var unread  = unreadCounts[wid] || 0;
-        var preview = last ? escHtml(last.text.substring(0, 60)) : '';
+        var preview = '';
+        if (last && last.file) {
+            preview = '\u{1F4CE} ' + escHtml(last.file.name || 'File');
+        } else if (last) {
+            preview = escHtml(last.text.substring(0, 60));
+        }
         var timeStr = last ? formatTs(last.ts) : '';
         var initial = handle.charAt(0).toUpperCase();
         var badge   = unread > 0 ? '<span class="unread-badge">' + Math.min(unread, 9) + '</span>' : '';

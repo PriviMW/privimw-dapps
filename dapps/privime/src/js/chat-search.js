@@ -1,7 +1,8 @@
 'use strict';
 
-import { conversations, activeChat } from './state.js';
-import { escHtml, formatTime, formatDateSep } from './helpers.js';
+import { conversations, activeChat, downloadedFiles } from './state.js';
+import { escHtml, escAttr, formatTime, formatDateSep,
+         formatFileSize, isImageMime, truncateFilename } from './helpers.js';
 import { renderChatMessages } from './render-chat.js';
 
 // ================================================================
@@ -37,10 +38,11 @@ export function onChatSearchInput() {
     chatSearchMatches = [];
     if (q.length > 0) {
         msgs.forEach(function(m, i) {
-            var idx = m.text.toLowerCase().indexOf(q);
+            var searchText = m.file ? (m.file.name || '') : m.text;
+            var idx = searchText.toLowerCase().indexOf(q);
             while (idx !== -1) {
                 chatSearchMatches.push({ msgIdx: i, startIdx: idx });
-                idx = m.text.toLowerCase().indexOf(q, idx + 1);
+                idx = searchText.toLowerCase().indexOf(q, idx + 1);
             }
         });
     }
@@ -107,14 +109,38 @@ export function highlightSearchResults(query) {
                 ? ' <span class="msg-tick read">\u2713\u2713</span>'
                 : ' <span class="msg-tick">\u2713</span>';
         }
-        var textHtml;
-        if (matchByMsg[i]) {
-            textHtml = highlightText(m.text, matchByMsg[i]);
+        var bubbleContent;
+        if (m.file) {
+            var fileIcon = isImageMime(m.file.mime) ? '\u{1F5BC}' : '\u{1F4CE}';
+            var sizeStr = formatFileSize(m.file.size);
+            var nameStr = escHtml(truncateFilename(m.file.name, 40));
+            var cached = downloadedFiles[m.file.cid];
+            var previewHtml = '';
+            if (cached && isImageMime(m.file.mime)) {
+                previewHtml = '<img src="' + cached + '" class="file-inline-img">';
+            }
+            bubbleContent = '<div class="file-bubble-inner">' +
+                '<div class="file-preview">' + previewHtml + '</div>' +
+                '<div class="file-info-row">' +
+                '<span class="file-icon">' + fileIcon + '</span>' +
+                '<div class="file-details">' +
+                '<div class="file-name">' + nameStr + '</div>' +
+                '<div class="file-size">' + sizeStr + '</div>' +
+                '</div></div>' +
+                (m.text ? '<div class="file-caption">' + escHtml(m.text) + '</div>' : '') +
+                '</div>';
+            cls += ' file';
         } else {
-            textHtml = escHtml(m.text);
+            var textHtml;
+            if (matchByMsg[i]) {
+                textHtml = highlightText(m.text, matchByMsg[i]);
+            } else {
+                textHtml = escHtml(m.text);
+            }
+            bubbleContent = replyHtml + textHtml;
         }
         html.push('<div class="msg-bubble ' + cls + '" id="msg-' + i + '" oncontextmenu="showBubbleMenu(event,' + i + ')">' +
-            replyHtml + textHtml +
+            bubbleContent +
             '<div class="msg-time">' + time + tickHtml + '</div>' +
         '</div>');
     });

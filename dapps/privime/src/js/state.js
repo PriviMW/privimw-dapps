@@ -114,3 +114,16 @@ export function setForwardMode(v) { forwardMode = v; }
 
 export var forwardText = null;
 export function setForwardText(v) { forwardText = v; }
+
+export var forwardFile = null;
+export function setForwardFile(v) { forwardFile = v; }
+
+// File sharing
+export var fileUploadInProgress = false;
+export function setFileUploadInProgress(v) { fileUploadInProgress = v; }
+
+export var pendingFile = null;          // File object waiting to be sent (preview bar)
+export function setPendingFile(v) { pendingFile = v; }
+
+export var downloadedFiles = {};        // { cid: blobUrl } — session cache for auto-downloaded images
+export function setDownloadedFile(cid, url) { downloadedFiles[cid] = url; }

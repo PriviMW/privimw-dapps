@@ -190,10 +190,20 @@
         </div>
         <div id="chatMessages" class="chat-messages"></div>
         <div class="chat-input-area">
+            <input type="file" id="filePickerInput" style="display:none"
+                   accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain"
+                   onchange="if(this.files[0]) _handleFileSelection(this.files[0])">
             <div id="replyBar" style="display:none;" class="reply-bar">
                 <span class="reply-bar-label">↩ Replying to</span>
                 <span id="replyBarText" class="reply-bar-text"></span>
                 <button class="reply-cancel-btn" onclick="cancelReply()">×</button>
+            </div>
+            <div id="filePreviewBar" class="reply-bar" style="display:none">
+                <div class="reply-bar-content">
+                    <span id="filePreviewIcon" class="file-icon"></span>
+                    <span id="filePreviewText"></span>
+                </div>
+                <button class="reply-cancel-btn" onclick="cancelFileAttachment()">&times;</button>
             </div>
             <div class="chat-ttl-warning">⚠ Messages expire after 12 hours if unread</div>
             <div id="slashCmdPopup" class="slash-cmd-popup"></div>
@@ -204,6 +214,9 @@
             <div class="chat-input-row">
                 <button class="emoji-btn" onclick="toggleEmojiPanel()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
                 <button class="slash-btn" onclick="toggleSlashPopup()" title="Commands">/</button>
+                <button class="attach-btn" onclick="openFilePicker()" title="Attach file">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.49"/></svg>
+                </button>
                 <textarea id="chatInput" class="chat-input" rows="1"
                     placeholder="Message..."
                     oninput="onChatInput()"
@@ -276,9 +289,13 @@
 
 <!-- BUBBLE CONTEXT MENU -->
 <div id="bubbleContextMenu" class="context-menu">
-    <div class="context-menu-item" onclick="doCopyBubble()">
+    <div id="bubbleCopyText" class="context-menu-item" onclick="doCopyBubble()">
         <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
         Copy text
+    </div>
+    <div id="bubbleSaveFile" class="context-menu-item" style="display:none" onclick="doSaveFileBubble()">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        Save file
     </div>
     <div class="context-menu-item" onclick="doReplyBubble()">
         <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
@@ -342,6 +359,18 @@
             <button class="btn btn-secondary btn-full" onclick="closeForwardModal()">Cancel</button>
         </div>
     </div>
+</div>
+
+<!-- LIGHTBOX MODAL -->
+<div id="lightboxModal" class="lightbox-overlay" onclick="closeLightbox()">
+    <img id="lightboxImg" class="lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+    <div class="lightbox-controls" onclick="event.stopPropagation()">
+        <button class="lightbox-action-btn" onclick="copyLightboxImage()">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/></svg>
+            Copy
+        </button>
+    </div>
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
 </div>
 
 <!-- ==================== JAVASCRIPT ==================== -->

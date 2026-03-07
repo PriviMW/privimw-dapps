@@ -168,7 +168,7 @@ export function processMessages(result) {
             return;
         }
 
-        if (payload.t !== 'dm' && payload.t !== 'tip') return;
+        if (payload.t !== 'dm' && payload.t !== 'tip' && payload.t !== 'file') return;
 
         // Skip messages from blocked users
         if (payload.from && isBlocked(payload.from.replace(/^@/, '').toLowerCase())) return;
@@ -237,13 +237,32 @@ export function processMessages(result) {
 
         if (!conversations[convKey]) conversations[convKey] = [];
 
-        // Avoid duplicates by ts+text+sent
-        var exists = conversations[convKey].some(function(x) { return x.ts === ts && x.text === text && x.sent === sent; });
+        // Avoid duplicates by ts+text+sent (or ts+sent+cid for files)
+        var exists;
+        if (payload.t === 'file' && payload.file) {
+            var fileCid = payload.file.cid;
+            exists = conversations[convKey].some(function(x) {
+                return x.ts === ts && x.sent === sent && x.file && x.file.cid === fileCid;
+            });
+        } else {
+            exists = conversations[convKey].some(function(x) { return x.ts === ts && x.text === text && x.sent === sent; });
+        }
         if (!exists) {
             var msgData = { text: text, ts: ts, sent: sent, reply: payload.reply || null };
             if (payload.t === 'tip') {
                 msgData.isTip = true;
                 msgData.tipAmount = payload.amount || 0;
+            }
+            if (payload.t === 'file' && payload.file) {
+                msgData.file = {
+                    cid: payload.file.cid || '',
+                    key: payload.file.key || '',
+                    iv: payload.file.iv || '',
+                    name: payload.file.name || 'file',
+                    size: payload.file.size || 0,
+                    mime: payload.file.mime || 'application/octet-stream'
+                };
+                msgData.text = payload.msg || ''; // caption
             }
             conversations[convKey].push(msgData);
             // Only count as unread if this is a genuinely new message (not a re-processed one)

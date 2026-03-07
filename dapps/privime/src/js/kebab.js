@@ -1,7 +1,7 @@
 'use strict';
 
 import { activeChat, myHandle, conversations, contacts } from './state.js';
-import { showToast } from './helpers.js';
+import { showToast, formatFileSize, saveFileWithPicker } from './helpers.js';
 import { blockedUsers } from './block-user.js';
 import { showContactProfile } from './navigation.js';
 
@@ -46,17 +46,12 @@ export function exportChatHistory() {
     msgs.forEach(function(m) {
         var who = m.sent ? (myHandle ? '@' + myHandle.handle : 'Me') : '@' + handle;
         var time = new Date(m.ts * 1000).toLocaleString();
-        lines.push('[' + time + '] ' + who + ': ' + m.text);
+        var content = m.file
+            ? '[File: ' + (m.file.name || 'file') + ' (' + formatFileSize(m.file.size) + ')]' + (m.text ? ' ' + m.text : '')
+            : m.text;
+        lines.push('[' + time + '] ' + who + ': ' + content);
     });
     var text = lines.join('\n');
     var blob = new Blob([text], { type: 'text/plain' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'privime-chat-' + handle + '.txt';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Chat exported', 'success');
+    saveFileWithPicker(blob, 'privime-chat-' + handle + '.txt');
 }
