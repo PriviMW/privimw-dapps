@@ -1374,7 +1374,7 @@ a { color: inherit; text-decoration: none; }
   };
 
   // src/js/config.js
-  var PRIVIME_CID = "97db059a347227d2d71fd0cb7fb5d993343ab1540d2eaf40fe48d131b611635f";
+  var PRIVIME_CID = "32c6e5836eb5d2d428acce7ca4e262c8bf9f615c142811f7cf4ee4717f8747a9";
   var GROTH_PER_BEAM = 1e8;
   var MAX_MSG_CHARS = 950;
   var MSG_REFRESH_MS = 2e3;
@@ -1539,6 +1539,41 @@ a { color: inherit; text-decoration: none; }
   function shortWalletId(wid) {
     if (!wid || wid.length < 16) return wid || "";
     return wid.substring(0, 8) + "..." + wid.substring(wid.length - 8);
+  }
+  function fixBvmUtf8(str) {
+    if (!str || typeof str !== "string") return str || "";
+    var hasMangled = false;
+    for (var i = 0; i < str.length; i++) {
+      var code = str.charCodeAt(i);
+      if (code >= 65533 && i + 4 < str.length && str.substring(i + 1, i + 3).toLowerCase() === "ff") {
+        hasMangled = true;
+        break;
+      }
+    }
+    if (!hasMangled) return str;
+    var bytes = [];
+    var i = 0;
+    while (i < str.length) {
+      var code = str.charCodeAt(i);
+      if (code >= 65533 && i + 4 < str.length) {
+        var tail = str.substring(i + 1, i + 5).toLowerCase();
+        var m = tail.match(/^ff([0-9a-f]{2})$/);
+        if (m) {
+          bytes.push(parseInt(m[1], 16));
+          i += 5;
+          continue;
+        }
+      }
+      if (code < 128) {
+        bytes.push(code);
+      }
+      i++;
+    }
+    try {
+      return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
+    } catch (e) {
+      return str;
+    }
   }
   function escHtml(str) {
     if (!str) return "";
@@ -2787,7 +2822,7 @@ a { color: inherit; text-decoration: none; }
       if (result && !result.error && result.handle) {
         contacts[walletId] = contacts[walletId] || {};
         contacts[walletId].handle = result.handle;
-        contacts[walletId].display_name = result.display_name || "";
+        contacts[walletId].display_name = fixBvmUtf8(result.display_name) || "";
         if (currentPage === "home") renderContactList();
         if (currentPage === "chat" && activeChat === walletId) renderChatMessages(walletId);
       }
@@ -2809,7 +2844,7 @@ a { color: inherit; text-decoration: none; }
         if (!contacts[convKey]) contacts[convKey] = {};
         contacts[convKey].handle = handle;
         contacts[convKey].wallet_id = receiveAddr;
-        contacts[convKey].display_name = result.display_name || "";
+        contacts[convKey].display_name = fixBvmUtf8(result.display_name) || "";
         if (deletedConvs[convKey] && !deletedConvs[receiveAddr]) {
           deletedConvs[receiveAddr] = deletedConvs[convKey];
         }
@@ -2844,8 +2879,8 @@ a { color: inherit; text-decoration: none; }
       if (result && !result.error && result.wallet_id) {
         var wid = result.wallet_id;
         var hKey = "@" + handle.toLowerCase();
-        contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: result.display_name || "" };
-        callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: result.display_name || "", registered_height: result.registered_height });
+        contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: fixBvmUtf8(result.display_name) || "" };
+        callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: fixBvmUtf8(result.display_name) || "", registered_height: result.registered_height });
       } else {
         callback(result && result.error ? extractError(result) : "Not found");
       }
@@ -3472,7 +3507,7 @@ a { color: inherit; text-decoration: none; }
       setMyHandle({
         handle: result.handle,
         wallet_id: result.wallet_id,
-        display_name: result.display_name || "",
+        display_name: fixBvmUtf8(result.display_name) || "",
         registered_height: result.registered_height
       });
       setMyWalletId(normalizeWalletId(result.wallet_id) || result.wallet_id);
@@ -3738,9 +3773,9 @@ a { color: inherit; text-decoration: none; }
             contacts[hKey] = contacts[hKey] || {};
             contacts[hKey].handle = handle;
             if (r.wallet_id) contacts[hKey].wallet_id = r.wallet_id;
-            if (r.display_name) contacts[hKey].display_name = r.display_name;
+            if (r.display_name) contacts[hKey].display_name = fixBvmUtf8(r.display_name);
             var initial = handle.charAt(0).toUpperCase();
-            var label = r.display_name || "@" + escHtml(handle);
+            var label = fixBvmUtf8(r.display_name) || "@" + escHtml(handle);
             chainHtml.push(
               `<div class="search-result-item" onclick="showChatPage('` + escAttr(hKey) + `')"><div class="contact-avatar" style="width:40px;height:40px;font-size:16px;">` + initial + '</div><div><div class="search-result-name">' + escHtml(label) + '</div><div class="search-result-sub">@' + escHtml(handle) + "</div></div></div>"
             );
@@ -3830,10 +3865,11 @@ a { color: inherit; text-decoration: none; }
           document.getElementById("profileWalletId").textContent = shortWalletId(r.wallet_id);
           document.getElementById("profilePage").dataset.fullWalletId = r.wallet_id;
         }
-        if (r.display_name && r.display_name !== name) {
+        var dn = fixBvmUtf8(r.display_name);
+        if (dn && dn !== name) {
           contacts[id] = contacts[id] || {};
-          contacts[id].display_name = r.display_name;
-          document.getElementById("profileHandle").textContent = r.display_name;
+          contacts[id].display_name = dn;
+          document.getElementById("profileHandle").textContent = dn;
           document.getElementById("profileDisplayName").textContent = "@" + handle;
           saveToStorage();
         }

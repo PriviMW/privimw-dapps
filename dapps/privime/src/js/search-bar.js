@@ -1,7 +1,7 @@
 'use strict';
 
 import { contacts, searchDebounceTimer, setSearchDebounceTimer } from './state.js';
-import { escHtml, escAttr } from './helpers.js';
+import { escHtml, escAttr, fixBvmUtf8 } from './helpers.js';
 import { privimeInvoke } from './shader.js';
 
 // ================================================================
@@ -84,9 +84,9 @@ export function onSearchInput(val) {
                     contacts[hKey] = contacts[hKey] || {};
                     contacts[hKey].handle = handle;
                     if (r.wallet_id) contacts[hKey].wallet_id = r.wallet_id;
-                    if (r.display_name) contacts[hKey].display_name = r.display_name;
+                    if (r.display_name) contacts[hKey].display_name = fixBvmUtf8(r.display_name);
                     var initial = handle.charAt(0).toUpperCase();
-                    var label = r.display_name || '@' + escHtml(handle);
+                    var label = fixBvmUtf8(r.display_name) || '@' + escHtml(handle);
                     chainHtml.push(
                         '<div class="search-result-item" onclick="showChatPage(\'' + escAttr(hKey) + '\')">' +
                         '<div class="contact-avatar" style="width:40px;height:40px;font-size:16px;">' + initial + '</div>' +

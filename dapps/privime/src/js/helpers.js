@@ -17,6 +17,49 @@ export function shortWalletId(wid) {
     return wid.substring(0, 8) + '...' + wid.substring(wid.length - 8);
 }
 
+// Fix BVM sign-extended UTF-8: the BVM's DocAddText treats char as signed,
+// so bytes > 127 (e.g. 0xE2 in emoji ✨) become negative → sign-extended to
+// 0xFFFFFFE2 → JSON "\uFFFFFFE2" → JS parses as U+FFFF + "FFE2" literal text.
+// Result: each mangled byte shows as ￿ffe2 (replacement char + "ff" + hex byte).
+// This reconstructs the original UTF-8 bytes and decodes them.
+export function fixBvmUtf8(str) {
+    if (!str || typeof str !== 'string') return str || '';
+    // Quick check: look for the mangled pattern (char >= U+FFFD followed by "ff")
+    var hasMangled = false;
+    for (var i = 0; i < str.length; i++) {
+        var code = str.charCodeAt(i);
+        if (code >= 0xFFFD && i + 4 < str.length &&
+            str.substring(i + 1, i + 3).toLowerCase() === 'ff') {
+            hasMangled = true; break;
+        }
+    }
+    if (!hasMangled) return str;
+    // Parse: normal ASCII chars → byte, mangled pattern (￿ff + 2 hex) → decoded byte
+    var bytes = [];
+    var i = 0;
+    while (i < str.length) {
+        var code = str.charCodeAt(i);
+        if (code >= 0xFFFD && i + 4 < str.length) {
+            var tail = str.substring(i + 1, i + 5).toLowerCase();
+            var m = tail.match(/^ff([0-9a-f]{2})$/);
+            if (m) {
+                bytes.push(parseInt(m[1], 16));
+                i += 5;
+                continue;
+            }
+        }
+        if (code < 128) {
+            bytes.push(code);
+        }
+        i++;
+    }
+    try {
+        return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+    } catch (e) {
+        return str;
+    }
+}
+
 export function escHtml(str) {
     if (!str) return '';
     return String(str)

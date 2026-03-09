@@ -7,7 +7,7 @@ import { isConnected, setConnected, shaderBytes, myHandle, setMyHandle,
          contacts, setContacts, deletedConvs, unreadCounts,
          allMessages, setAllMessages, currentPage, activeChat,
          msgPollTimer, setMsgPollTimer, registrationFee, setRegistrationFee } from './state.js';
-import { setSplashStatus, showToast, updateFeeDisplay } from './helpers.js';
+import { setSplashStatus, showToast, updateFeeDisplay, fixBvmUtf8 } from './helpers.js';
 import { privimeInvoke } from './shader.js';
 import { loadShaderBytes } from './shader.js';
 import { readMessages, sendReadReceipts } from './sbbs.js';
@@ -96,7 +96,7 @@ export function applyMyHandle(result) {
         setMyHandle({
             handle: result.handle,
             wallet_id: result.wallet_id,
-            display_name: result.display_name || '',
+            display_name: fixBvmUtf8(result.display_name) || '',
             registered_height: result.registered_height
         });
         setMyWalletId(normalizeWalletId(result.wallet_id) || result.wallet_id);

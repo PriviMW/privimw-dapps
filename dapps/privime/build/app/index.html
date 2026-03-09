@@ -1540,6 +1540,33 @@ a { color: inherit; text-decoration: none; }
     if (!wid || wid.length < 16) return wid || "";
     return wid.substring(0, 8) + "..." + wid.substring(wid.length - 8);
   }
+  function fixBvmUtf8(str) {
+    if (!str || typeof str !== "string") return str || "";
+    var hasMangled = false;
+    for (var i = 0; i < str.length; i++) {
+      if (str.charCodeAt(i) > 65280) {
+        hasMangled = true;
+        break;
+      }
+    }
+    if (!hasMangled) return str;
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+      var code = str.charCodeAt(i);
+      if (code > 65280) {
+        bytes.push(code & 255);
+      } else if (code < 128) {
+        bytes.push(code);
+      } else {
+        bytes.push(code & 255);
+      }
+    }
+    try {
+      return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
+    } catch (e) {
+      return str;
+    }
+  }
   function escHtml(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -2787,7 +2814,7 @@ a { color: inherit; text-decoration: none; }
       if (result && !result.error && result.handle) {
         contacts[walletId] = contacts[walletId] || {};
         contacts[walletId].handle = result.handle;
-        contacts[walletId].display_name = result.display_name || "";
+        contacts[walletId].display_name = fixBvmUtf8(result.display_name) || "";
         if (currentPage === "home") renderContactList();
         if (currentPage === "chat" && activeChat === walletId) renderChatMessages(walletId);
       }
@@ -2809,7 +2836,7 @@ a { color: inherit; text-decoration: none; }
         if (!contacts[convKey]) contacts[convKey] = {};
         contacts[convKey].handle = handle;
         contacts[convKey].wallet_id = receiveAddr;
-        contacts[convKey].display_name = result.display_name || "";
+        contacts[convKey].display_name = fixBvmUtf8(result.display_name) || "";
         if (deletedConvs[convKey] && !deletedConvs[receiveAddr]) {
           deletedConvs[receiveAddr] = deletedConvs[convKey];
         }
@@ -2844,8 +2871,8 @@ a { color: inherit; text-decoration: none; }
       if (result && !result.error && result.wallet_id) {
         var wid = result.wallet_id;
         var hKey = "@" + handle.toLowerCase();
-        contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: result.display_name || "" };
-        callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: result.display_name || "", registered_height: result.registered_height });
+        contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: fixBvmUtf8(result.display_name) || "" };
+        callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: fixBvmUtf8(result.display_name) || "", registered_height: result.registered_height });
       } else {
         callback(result && result.error ? extractError(result) : "Not found");
       }
@@ -3472,7 +3499,7 @@ a { color: inherit; text-decoration: none; }
       setMyHandle({
         handle: result.handle,
         wallet_id: result.wallet_id,
-        display_name: result.display_name || "",
+        display_name: fixBvmUtf8(result.display_name) || "",
         registered_height: result.registered_height
       });
       setMyWalletId(normalizeWalletId(result.wallet_id) || result.wallet_id);
@@ -3738,9 +3765,9 @@ a { color: inherit; text-decoration: none; }
             contacts[hKey] = contacts[hKey] || {};
             contacts[hKey].handle = handle;
             if (r.wallet_id) contacts[hKey].wallet_id = r.wallet_id;
-            if (r.display_name) contacts[hKey].display_name = r.display_name;
+            if (r.display_name) contacts[hKey].display_name = fixBvmUtf8(r.display_name);
             var initial = handle.charAt(0).toUpperCase();
-            var label = r.display_name || "@" + escHtml(handle);
+            var label = fixBvmUtf8(r.display_name) || "@" + escHtml(handle);
             chainHtml.push(
               `<div class="search-result-item" onclick="showChatPage('` + escAttr(hKey) + `')"><div class="contact-avatar" style="width:40px;height:40px;font-size:16px;">` + initial + '</div><div><div class="search-result-name">' + escHtml(label) + '</div><div class="search-result-sub">@' + escHtml(handle) + "</div></div></div>"
             );
@@ -3830,10 +3857,11 @@ a { color: inherit; text-decoration: none; }
           document.getElementById("profileWalletId").textContent = shortWalletId(r.wallet_id);
           document.getElementById("profilePage").dataset.fullWalletId = r.wallet_id;
         }
-        if (r.display_name && r.display_name !== name) {
+        var dn = fixBvmUtf8(r.display_name);
+        if (dn && dn !== name) {
           contacts[id] = contacts[id] || {};
-          contacts[id].display_name = r.display_name;
-          document.getElementById("profileHandle").textContent = r.display_name;
+          contacts[id].display_name = dn;
+          document.getElementById("profileHandle").textContent = dn;
           document.getElementById("profileDisplayName").textContent = "@" + handle;
           saveToStorage();
         }

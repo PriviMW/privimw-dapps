@@ -3,7 +3,7 @@
 import { currentPage, setCurrentPage, activeChat, setActiveChat,
          profileFrom, setProfileFrom, contacts, unreadCounts,
          myHandle } from './state.js';
-import { escHtml, shortWalletId, showToast, copyToClipboard } from './helpers.js';
+import { escHtml, shortWalletId, showToast, copyToClipboard, fixBvmUtf8 } from './helpers.js';
 import { saveToStorage } from './storage.js';
 import { renderHome, renderContactList } from './render-home.js';
 import { renderChatMessages } from './render-chat.js';
@@ -107,10 +107,11 @@ export function showContactProfile(id) {
                 document.getElementById('profilePage').dataset.fullWalletId = r.wallet_id;
             }
             // Update display name from on-chain in case it changed
-            if (r.display_name && r.display_name !== name) {
+            var dn = fixBvmUtf8(r.display_name);
+            if (dn && dn !== name) {
                 contacts[id] = contacts[id] || {};
-                contacts[id].display_name = r.display_name;
-                document.getElementById('profileHandle').textContent = r.display_name;
+                contacts[id].display_name = dn;
+                document.getElementById('profileHandle').textContent = dn;
                 document.getElementById('profileDisplayName').textContent = '@' + handle;
                 saveToStorage();
             }

@@ -4,7 +4,7 @@ import { contacts, conversations, activeChat, setActiveChat,
          unreadCounts, deletedConvs, currentPage } from './state.js';
 import { privimeInvoke } from './shader.js';
 import { saveToStorage } from './storage.js';
-import { extractError } from './helpers.js';
+import { extractError, fixBvmUtf8 } from './helpers.js';
 import { normalizeWalletId } from './registration.js';
 import { renderContactList } from './render-home.js';
 import { renderChatMessages } from './render-chat.js';
@@ -20,7 +20,7 @@ export function resolveWalletIdToContact(walletId) {
         if (result && !result.error && result.handle) {
             contacts[walletId] = contacts[walletId] || {};
             contacts[walletId].handle = result.handle;
-            contacts[walletId].display_name = result.display_name || '';
+            contacts[walletId].display_name = fixBvmUtf8(result.display_name) || '';
             if (currentPage === 'home') renderContactList();
             if (currentPage === 'chat' && activeChat === walletId) renderChatMessages(walletId);
         }
@@ -51,7 +51,7 @@ export function resolveHandleIntoContact(handle, convKey) {
             if (!contacts[convKey]) contacts[convKey] = {};
             contacts[convKey].handle = handle;
             contacts[convKey].wallet_id = receiveAddr;
-            contacts[convKey].display_name = result.display_name || '';
+            contacts[convKey].display_name = fixBvmUtf8(result.display_name) || '';
             // Do NOT index contacts[receiveAddr] -- multiple handles can share the same
             // wallet_id (accounts on the same Beam wallet). Indexing by wallet_id causes
             // the last-resolved handle to overwrite all others.
@@ -94,8 +94,8 @@ export function resolveHandleToContact(handle, callback) {
         if (result && !result.error && result.wallet_id) {
             var wid = result.wallet_id;
             var hKey = '@' + handle.toLowerCase();
-            contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: result.display_name || '' };
-            callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: result.display_name || '', registered_height: result.registered_height });
+            contacts[hKey] = { handle: handle.toLowerCase(), wallet_id: wid, display_name: fixBvmUtf8(result.display_name) || '' };
+            callback(null, { wallet_id: wid, handle: handle.toLowerCase(), display_name: fixBvmUtf8(result.display_name) || '', registered_height: result.registered_height });
         } else {
             callback(result && result.error ? extractError(result) : 'Not found');
         }
