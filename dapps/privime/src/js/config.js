@@ -10,6 +10,7 @@ export var MSG_REFRESH_MS = 2000; // 2s poll for new messages (read_messages is 
 
 // File sharing
 export var MAX_FILE_SIZE     = 5 * 1024 * 1024;   // 5 MB
+export var INLINE_FILE_MAX_SIZE = 200 * 1024;      // 200 KB — embed in SBBS message, no IPFS needed
 export var IPFS_ADD_TIMEOUT  = 60000;              // 60s upload timeout
 export var IPFS_GET_TIMEOUT  = 30000;              // 30s download timeout
 export var MAX_FILENAME_LEN  = 60;                 // truncate in SBBS message

@@ -1,6 +1,6 @@
 'use strict';
 
-import { MAX_FILE_SIZE, IPFS_ADD_TIMEOUT, IPFS_GET_TIMEOUT,
+import { MAX_FILE_SIZE, INLINE_FILE_MAX_SIZE, IPFS_ADD_TIMEOUT, IPFS_GET_TIMEOUT,
          ALLOWED_MIME_TYPES, AUTO_DL_MAX_SIZE,
          COMPRESS_MAX_DIM, COMPRESS_QUALITY, COMPRESS_MIN_SIZE } from './config.js';
 import { activeChat, myHandle, contacts, conversations,
@@ -8,6 +8,28 @@ import { activeChat, myHandle, contacts, conversations,
          pendingFile, setPendingFile,
          downloadedFiles, setDownloadedFile,
          bubbleCtxMsg, bubbleCtxWid } from './state.js';
+
+// Base64 <-> Uint8Array helpers for inline file delivery
+function uint8ToBase64(bytes) {
+    var binary = '';
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+}
+
+function base64ToUint8(b64) {
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+// Inline file data lookup — stores base64 ciphertext for inline files (keyed by CID)
+// Used by downloadAndDecryptFile to skip IPFS when data is available in the message
+var inlineFileData = {};
+
+export function registerInlineFileData(cid, data) {
+    if (cid && data) inlineFileData[cid] = data;
+}
 
 // LRU eviction for blob URLs — prevents unbounded memory growth
 var blobUrlOrder = []; // CIDs in insertion order (oldest first)
@@ -272,37 +294,52 @@ export async function sendFile(file, caption) {
         // 4. Encrypt
         var ciphertext = await encryptFile(plaintext, ck.key, ck.iv);
 
-        // 5. Convert to uint8 array for IPFS API
-        showToast('Uploading to IPFS...', 'info');
-        var uint8Arr = Array.from(new Uint8Array(ciphertext));
+        // 5. Decide delivery: inline (< 200KB) vs IPFS
+        var cipherUint8 = new Uint8Array(ciphertext);
+        var fileCid;
+        var inlineData;
 
-        // 6. Upload to IPFS
-        var ipfsCid = await new Promise(function(resolve, reject) {
-            callApi('ipfs_add', {
-                data: uint8Arr,
-                pin: true,
-                timeout: IPFS_ADD_TIMEOUT
-            }, function(result) {
-                if (result && result.error) {
-                    reject(new Error(extractError(result)));
-                } else if (result && result.hash) {
-                    resolve(result.hash);
-                } else {
-                    reject(new Error('No IPFS hash returned'));
-                }
+        if (cipherUint8.length <= INLINE_FILE_MAX_SIZE) {
+            // INLINE: embed encrypted data directly in SBBS message — no IPFS, guaranteed delivery
+            showToast('Sending inline...', 'info');
+            inlineData = uint8ToBase64(cipherUint8);
+            fileCid = 'inline-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        } else {
+            // IPFS: upload encrypted data (requires sender to be online for receiver to download)
+            showToast('Uploading to IPFS...', 'info');
+            var uint8Arr = Array.from(cipherUint8);
+            fileCid = await new Promise(function(resolve, reject) {
+                callApi('ipfs_add', {
+                    data: uint8Arr,
+                    pin: true,
+                    timeout: IPFS_ADD_TIMEOUT
+                }, function(result) {
+                    if (result && result.error) {
+                        reject(new Error(extractError(result)));
+                    } else if (result && result.hash) {
+                        resolve(result.hash);
+                    } else {
+                        reject(new Error('No IPFS hash returned'));
+                    }
+                });
             });
-        });
+        }
 
-        // 7. Construct SBBS message
+        // 6. Construct SBBS message
         var ts = Math.floor(Date.now() / 1000);
         var fileMeta = {
-            cid: ipfsCid,
+            cid: fileCid,
             key: ck.keyHex,
             iv: ck.ivHex,
             name: truncateFilename(sendName, 60),
             size: sendSize,
             mime: sendMime
         };
+        if (inlineData) {
+            fileMeta.data = inlineData;
+            // Register so sender's own auto-download can find the data
+            registerInlineFileData(fileCid, inlineData);
+        }
 
         var msgObj = {
             v: 1, t: 'file', ts: ts,
@@ -389,37 +426,40 @@ export async function downloadAndDecryptFile(fileInfo, bubbleEl) {
         return;
     }
 
-    if (actionEl) actionEl.textContent = 'Downloading...';
-
     try {
-        var result = await new Promise(function(resolve, reject) {
-            callApi('ipfs_get', {
-                hash: fileInfo.cid,
-                timeout: IPFS_GET_TIMEOUT
-            }, function(res) {
-                if (res && res.error) {
-                    reject(new Error(extractError(res)));
-                } else if (res && res.data) {
-                    resolve(res.data);
-                } else {
-                    reject(new Error('No data returned from IPFS'));
-                }
+        var plaintext;
+        // Check inline data: from fileInfo directly, or from the lookup map
+        var inData = fileInfo.data || inlineFileData[fileInfo.cid];
+
+        if (inData) {
+            // INLINE PATH: data embedded in message — decrypt directly, no IPFS needed
+            if (actionEl) actionEl.textContent = 'Decrypting...';
+            var inlineCipher = base64ToUint8(inData);
+            if (inlineCipher.length > MAX_FILE_SIZE) throw new Error('Inline file exceeds size limit');
+            plaintext = await decryptFile(inlineCipher.buffer, fileInfo.key, fileInfo.iv);
+        } else {
+            // IPFS PATH: download from network (requires sender to be online)
+            if (actionEl) actionEl.textContent = 'Downloading...';
+            var result = await new Promise(function(resolve, reject) {
+                callApi('ipfs_get', {
+                    hash: fileInfo.cid,
+                    timeout: IPFS_GET_TIMEOUT
+                }, function(res) {
+                    if (res && res.error) {
+                        reject(new Error(extractError(res)));
+                    } else if (res && res.data) {
+                        resolve(res.data);
+                    } else {
+                        reject(new Error('No data returned from IPFS'));
+                    }
+                });
             });
-        });
 
-        if (actionEl) actionEl.textContent = 'Decrypting...';
-
-        // Validate actual download size (prevents spoofed metadata size
-        // from bypassing AUTO_DL_MAX_SIZE for auto-downloads)
-        if (result.length > MAX_FILE_SIZE) {
-            throw new Error('Downloaded file exceeds size limit');
+            if (actionEl) actionEl.textContent = 'Decrypting...';
+            if (result.length > MAX_FILE_SIZE) throw new Error('Downloaded file exceeds size limit');
+            var cipherBuf = new Uint8Array(result).buffer;
+            plaintext = await decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
         }
-
-        // Convert uint8 array to ArrayBuffer
-        var cipherBuf = new Uint8Array(result).buffer;
-
-        // Decrypt
-        var plaintext = await decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
 
         // Create blob + cache in memory and IndexedDB
         var blob = new Blob([plaintext], { type: fileInfo.mime });
@@ -475,6 +515,7 @@ async function triggerDownloadFromUrl(blobUrl, filename, mime) {
 // ================================================================
 
 var autoDownloadPending = {}; // { cid: true } — prevent concurrent downloads
+var autoDownloadFailed = {};  // { cid: true } — stop retrying failed downloads
 var autoDownloadActive = 0;
 var MAX_CONCURRENT_AUTO_DL = 3;
 
@@ -486,12 +527,15 @@ export function autoDownloadImages() {
 
         var cidAttr = bubble.getAttribute('data-cid');
         if (!cidAttr) return;
-        // Already downloaded or in progress
-        if (downloadedFiles[cidAttr] || autoDownloadPending[cidAttr]) return;
+        // Already downloaded, in progress, or previously failed
+        if (downloadedFiles[cidAttr] || autoDownloadPending[cidAttr] || autoDownloadFailed[cidAttr]) return;
 
         var mimeAttr = bubble.getAttribute('data-mime');
         var sizeAttr = parseInt(bubble.getAttribute('data-size'), 10);
-        if (!isImageMime(mimeAttr) || sizeAttr > AUTO_DL_MAX_SIZE) return;
+
+        // Auto-process: inline files (any type, no network cost) OR small IPFS images
+        var hasInlineData = !!(inlineFileData[cidAttr]);
+        if (!hasInlineData && (!isImageMime(mimeAttr) || sizeAttr > AUTO_DL_MAX_SIZE)) return;
 
         // Already has image loaded
         if (bubble.querySelector('.file-inline-img')) return;
@@ -507,7 +551,10 @@ export function autoDownloadImages() {
         downloadAndDecryptFile({
             cid: cidAttr, key: keyAttr, iv: ivAttr,
             name: nameAttr, size: sizeAttr, mime: mimeAttr
-        }, bubble).finally(function() {
+        }, bubble).catch(function() {
+            // Mark as failed to prevent retry spam on every render cycle
+            autoDownloadFailed[cidAttr] = true;
+        }).finally(function() {
             delete autoDownloadPending[cidAttr];
             autoDownloadActive--;
             // Trigger next batch after one completes

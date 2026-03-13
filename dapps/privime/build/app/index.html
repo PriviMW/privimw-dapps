@@ -1379,6 +1379,7 @@ a { color: inherit; text-decoration: none; }
   var MAX_MSG_CHARS = 950;
   var MSG_REFRESH_MS = 2e3;
   var MAX_FILE_SIZE = 5 * 1024 * 1024;
+  var INLINE_FILE_MAX_SIZE = 200 * 1024;
   var IPFS_ADD_TIMEOUT = 6e4;
   var IPFS_GET_TIMEOUT = 3e4;
   var AUTO_DL_MAX_SIZE = 2 * 1024 * 1024;
@@ -1544,22 +1545,30 @@ a { color: inherit; text-decoration: none; }
     if (!str || typeof str !== "string") return str || "";
     var hasMangled = false;
     for (var i = 0; i < str.length; i++) {
-      if (str.charCodeAt(i) > 65280) {
+      var code = str.charCodeAt(i);
+      if (code >= 65533 && i + 4 < str.length && str.substring(i + 1, i + 3).toLowerCase() === "ff") {
         hasMangled = true;
         break;
       }
     }
     if (!hasMangled) return str;
     var bytes = [];
-    for (var i = 0; i < str.length; i++) {
+    var i = 0;
+    while (i < str.length) {
       var code = str.charCodeAt(i);
-      if (code > 65280) {
-        bytes.push(code & 255);
-      } else if (code < 128) {
-        bytes.push(code);
-      } else {
-        bytes.push(code & 255);
+      if (code >= 65533 && i + 4 < str.length) {
+        var tail = str.substring(i + 1, i + 5).toLowerCase();
+        var m = tail.match(/^ff([0-9a-f]{2})$/);
+        if (m) {
+          bytes.push(parseInt(m[1], 16));
+          i += 5;
+          continue;
+        }
       }
+      if (code < 128) {
+        bytes.push(code);
+      }
+      i++;
     }
     try {
       return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
@@ -1807,8 +1816,9 @@ a { color: inherit; text-decoration: none; }
     } catch (e) {
       return;
     }
-    if (answer.result && (answer.result.ev_system_state || answer.result.ev_txs_changed)) {
-      onWalletEvent(answer.result);
+    if (typeof answer.id === "string" && answer.id.startsWith("ev_")) {
+      onWalletEvent(answer.id);
+      return;
     }
     var info = apiCallbacks.get(answer.id);
     if (!info) return;
@@ -1846,11 +1856,11 @@ a { color: inherit; text-decoration: none; }
     if (handlers.loadMessages) _eventHandlers.loadMessages = handlers.loadMessages;
     if (handlers.showHome) _eventHandlers.showHome = handlers.showHome;
   }
-  function onWalletEvent(result) {
-    if (result.ev_system_state) {
+  function onWalletEvent(eventId) {
+    if (eventId === "ev_system_state") {
       if (_eventHandlers.checkIdentityChange) _eventHandlers.checkIdentityChange();
     }
-    if (result.ev_txs_changed) {
+    if (eventId === "ev_txs_changed") {
       if (myHandle) {
         if (_eventHandlers.loadMessages) _eventHandlers.loadMessages(false);
       } else {
@@ -2220,6 +2230,21 @@ a { color: inherit; text-decoration: none; }
   }
 
   // src/js/file-sharing.js
+  function uint8ToBase64(bytes) {
+    var binary = "";
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+  function base64ToUint8(b64) {
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  var inlineFileData = {};
+  function registerInlineFileData(cid, data) {
+    if (cid && data) inlineFileData[cid] = data;
+  }
   var blobUrlOrder = [];
   var MAX_CACHED_BLOBS = 30;
   var IDB_NAME = "privime_files";
@@ -2437,32 +2462,45 @@ a { color: inherit; text-decoration: none; }
         var plaintext = yield file.arrayBuffer();
         var ck = yield generateFileKey();
         var ciphertext = yield encryptFile(plaintext, ck.key, ck.iv);
-        showToast("Uploading to IPFS...", "info");
-        var uint8Arr = Array.from(new Uint8Array(ciphertext));
-        var ipfsCid = yield new Promise(function(resolve, reject) {
-          callApi("ipfs_add", {
-            data: uint8Arr,
-            pin: true,
-            timeout: IPFS_ADD_TIMEOUT
-          }, function(result) {
-            if (result && result.error) {
-              reject(new Error(extractError(result)));
-            } else if (result && result.hash) {
-              resolve(result.hash);
-            } else {
-              reject(new Error("No IPFS hash returned"));
-            }
+        var cipherUint8 = new Uint8Array(ciphertext);
+        var fileCid;
+        var inlineData;
+        if (cipherUint8.length <= INLINE_FILE_MAX_SIZE) {
+          showToast("Sending inline...", "info");
+          inlineData = uint8ToBase64(cipherUint8);
+          fileCid = "inline-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        } else {
+          showToast("Uploading to IPFS...", "info");
+          var uint8Arr = Array.from(cipherUint8);
+          fileCid = yield new Promise(function(resolve, reject) {
+            callApi("ipfs_add", {
+              data: uint8Arr,
+              pin: true,
+              timeout: IPFS_ADD_TIMEOUT
+            }, function(result) {
+              if (result && result.error) {
+                reject(new Error(extractError(result)));
+              } else if (result && result.hash) {
+                resolve(result.hash);
+              } else {
+                reject(new Error("No IPFS hash returned"));
+              }
+            });
           });
-        });
+        }
         var ts = Math.floor(Date.now() / 1e3);
         var fileMeta = {
-          cid: ipfsCid,
+          cid: fileCid,
           key: ck.keyHex,
           iv: ck.ivHex,
           name: truncateFilename(sendName, 60),
           size: sendSize,
           mime: sendMime
         };
+        if (inlineData) {
+          fileMeta.data = inlineData;
+          registerInlineFileData(fileCid, inlineData);
+        }
         var msgObj = {
           v: 1,
           t: "file",
@@ -2540,28 +2578,35 @@ a { color: inherit; text-decoration: none; }
         }
         return;
       }
-      if (actionEl) actionEl.textContent = "Downloading...";
       try {
-        var result = yield new Promise(function(resolve, reject) {
-          callApi("ipfs_get", {
-            hash: fileInfo.cid,
-            timeout: IPFS_GET_TIMEOUT
-          }, function(res) {
-            if (res && res.error) {
-              reject(new Error(extractError(res)));
-            } else if (res && res.data) {
-              resolve(res.data);
-            } else {
-              reject(new Error("No data returned from IPFS"));
-            }
+        var plaintext;
+        var inData = fileInfo.data || inlineFileData[fileInfo.cid];
+        if (inData) {
+          if (actionEl) actionEl.textContent = "Decrypting...";
+          var inlineCipher = base64ToUint8(inData);
+          if (inlineCipher.length > MAX_FILE_SIZE) throw new Error("Inline file exceeds size limit");
+          plaintext = yield decryptFile(inlineCipher.buffer, fileInfo.key, fileInfo.iv);
+        } else {
+          if (actionEl) actionEl.textContent = "Downloading...";
+          var result = yield new Promise(function(resolve, reject) {
+            callApi("ipfs_get", {
+              hash: fileInfo.cid,
+              timeout: IPFS_GET_TIMEOUT
+            }, function(res) {
+              if (res && res.error) {
+                reject(new Error(extractError(res)));
+              } else if (res && res.data) {
+                resolve(res.data);
+              } else {
+                reject(new Error("No data returned from IPFS"));
+              }
+            });
           });
-        });
-        if (actionEl) actionEl.textContent = "Decrypting...";
-        if (result.length > MAX_FILE_SIZE) {
-          throw new Error("Downloaded file exceeds size limit");
+          if (actionEl) actionEl.textContent = "Decrypting...";
+          if (result.length > MAX_FILE_SIZE) throw new Error("Downloaded file exceeds size limit");
+          var cipherBuf = new Uint8Array(result).buffer;
+          plaintext = yield decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
         }
-        var cipherBuf = new Uint8Array(result).buffer;
-        var plaintext = yield decryptFile(cipherBuf, fileInfo.key, fileInfo.iv);
         var blob = new Blob([plaintext], { type: fileInfo.mime });
         var blobUrl = URL.createObjectURL(blob);
         cacheBlobUrl(fileInfo.cid, blobUrl);
@@ -2606,6 +2651,7 @@ a { color: inherit; text-decoration: none; }
     });
   }
   var autoDownloadPending = {};
+  var autoDownloadFailed = {};
   var autoDownloadActive = 0;
   var MAX_CONCURRENT_AUTO_DL = 3;
   function autoDownloadImages() {
@@ -2614,10 +2660,11 @@ a { color: inherit; text-decoration: none; }
       if (autoDownloadActive >= MAX_CONCURRENT_AUTO_DL) return;
       var cidAttr = bubble.getAttribute("data-cid");
       if (!cidAttr) return;
-      if (downloadedFiles[cidAttr] || autoDownloadPending[cidAttr]) return;
+      if (downloadedFiles[cidAttr] || autoDownloadPending[cidAttr] || autoDownloadFailed[cidAttr]) return;
       var mimeAttr = bubble.getAttribute("data-mime");
       var sizeAttr = parseInt(bubble.getAttribute("data-size"), 10);
-      if (!isImageMime(mimeAttr) || sizeAttr > AUTO_DL_MAX_SIZE) return;
+      var hasInlineData = !!inlineFileData[cidAttr];
+      if (!hasInlineData && (!isImageMime(mimeAttr) || sizeAttr > AUTO_DL_MAX_SIZE)) return;
       if (bubble.querySelector(".file-inline-img")) return;
       autoDownloadPending[cidAttr] = true;
       autoDownloadActive++;
@@ -2631,7 +2678,9 @@ a { color: inherit; text-decoration: none; }
         name: nameAttr,
         size: sizeAttr,
         mime: mimeAttr
-      }, bubble).finally(function() {
+      }, bubble).catch(function() {
+        autoDownloadFailed[cidAttr] = true;
+      }).finally(function() {
         delete autoDownloadPending[cidAttr];
         autoDownloadActive--;
         autoDownloadImages();
@@ -3619,7 +3668,10 @@ a { color: inherit; text-decoration: none; }
           var fMime = String(pf.mime || "application/octet-stream");
           var fSize = parseInt(pf.size, 10) || 0;
           var fName = String(pf.name || "file").replace(/[<>"'&\\]/g, "_").substring(0, 80);
-          if (!fCid || !/^[a-fA-F0-9]{64}$/.test(fKey) || !/^[a-fA-F0-9]{24}$/.test(fIv)) return;
+          var fData = typeof pf.data === "string" ? pf.data : void 0;
+          if (!/^[a-fA-F0-9]{64}$/.test(fKey) || !/^[a-fA-F0-9]{24}$/.test(fIv)) return;
+          if (!fCid && !fData) return;
+          if (!fCid && fData) fCid = "inline-" + fData.slice(0, 16);
           if (ALLOWED_MIME_TYPES.indexOf(fMime) === -1) fMime = "application/octet-stream";
           msgData.file = {
             cid: fCid,
@@ -3629,6 +3681,10 @@ a { color: inherit; text-decoration: none; }
             size: fSize,
             mime: fMime
           };
+          if (fData) {
+            msgData.file.data = fData;
+            registerInlineFileData(fCid, fData);
+          }
           msgData.text = payload.msg || "";
         }
         conversations[convKey].push(msgData);

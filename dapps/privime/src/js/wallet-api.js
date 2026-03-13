@@ -26,8 +26,10 @@ export function handleApiResult(json) {
     var answer;
     try { answer = typeof json === 'string' ? JSON.parse(json) : json; }
     catch (e) { return; }
-    if (answer.result && (answer.result.ev_system_state || answer.result.ev_txs_changed)) {
-        onWalletEvent(answer.result);
+    // Wallet events use string IDs like "ev_system_state", "ev_txs_changed"
+    if (typeof answer.id === 'string' && answer.id.startsWith('ev_')) {
+        onWalletEvent(answer.id);
+        return;
     }
 
     var info = apiCallbacks.get(answer.id);
@@ -70,12 +72,12 @@ export function registerEventHandlers(handlers) {
     if (handlers.showHome) _eventHandlers.showHome = handlers.showHome;
 }
 
-function onWalletEvent(result) {
-    if (result.ev_system_state) {
+function onWalletEvent(eventId) {
+    if (eventId === 'ev_system_state') {
         // System state changed (new block or account switch) -- re-check identity
         if (_eventHandlers.checkIdentityChange) _eventHandlers.checkIdentityChange();
     }
-    if (result.ev_txs_changed) {
+    if (eventId === 'ev_txs_changed') {
         if (myHandle) {
             // Already initialized -- new messages only, no need to re-run my_handle
             if (_eventHandlers.loadMessages) _eventHandlers.loadMessages(false);

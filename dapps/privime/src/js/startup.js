@@ -21,6 +21,7 @@ import { resolveWalletIdToContact, findHandleByWalletId, resolveHandleIntoContac
 import { normalizeWalletId } from './registration.js';
 import { registerApplyMyHandle } from './registration.js';
 import { isBlocked } from './block-user.js';
+import { registerInlineFileData } from './file-sharing.js';
 
 // ================================================================
 // STARTUP SEQUENCE
@@ -261,14 +262,23 @@ export function processMessages(result) {
                 var fMime = String(pf.mime || 'application/octet-stream');
                 var fSize = parseInt(pf.size, 10) || 0;
                 var fName = String(pf.name || 'file').replace(/[<>"'&\\]/g, '_').substring(0, 80);
-                // Validate: CID non-empty, key=64 hex, iv=24 hex
-                if (!fCid || !/^[a-fA-F0-9]{64}$/.test(fKey) || !/^[a-fA-F0-9]{24}$/.test(fIv)) return;
+                // Inline delivery: encrypted data embedded in message (no IPFS)
+                var fData = typeof pf.data === 'string' ? pf.data : undefined;
+                // Validate: key=64 hex + iv=24 hex always required. Need either CID (IPFS) or data (inline).
+                if (!/^[a-fA-F0-9]{64}$/.test(fKey) || !/^[a-fA-F0-9]{24}$/.test(fIv)) return;
+                if (!fCid && !fData) return;
+                // Generate stable synthetic CID for inline files that arrive without one
+                if (!fCid && fData) fCid = 'inline-' + fData.slice(0, 16);
                 // Enforce MIME whitelist on receiver side
                 if (ALLOWED_MIME_TYPES.indexOf(fMime) === -1) fMime = 'application/octet-stream';
                 msgData.file = {
                     cid: fCid, key: fKey, iv: fIv,
                     name: fName, size: fSize, mime: fMime
                 };
+                if (fData) {
+                    msgData.file.data = fData;
+                    registerInlineFileData(fCid, fData);
+                }
                 msgData.text = payload.msg || ''; // caption
             }
             conversations[convKey].push(msgData);
