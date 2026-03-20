@@ -1,0 +1,3513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BEAM All-in-One - DEX & Token Minter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+:root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-tertiary: #1f2937;
+    --bg-card: #151d2e;
+    --bg-hover: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-primary: #25c2a0;
+    --accent-secondary: #00d4ff;
+    --accent-purple: #a855f7;
+    --accent-pink: #ec4899;
+    --accent-orange: #f97316;
+    --accent-yellow: #eab308;
+    --border-color: #2d3748;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --error: #ef4444;
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --spacing-2xl: 48px;
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.5);
+    --transition-fast: 150ms ease;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+a { color: var(--accent-primary); text-decoration: none; }
+a:hover { color: var(--accent-secondary); }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 var(--spacing-lg); }
+
+/* Header */
+.header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+.header-content {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+    flex-wrap: wrap;
+}
+.header-content > * { margin-right: 16px; }
+.header-content > *:last-child { margin-right: 0; }
+.logo {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 1.25rem;
+}
+.logo svg { color: var(--accent-primary); margin-right: 8px; }
+.nav { display: flex; display: -webkit-flex; flex-wrap: wrap; }
+.nav-link { margin-right: 4px; }
+.nav-link {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.nav-link:hover { color: var(--text-primary); background: var(--bg-hover); }
+.nav-link.active { color: var(--accent-primary); background: rgba(37, 194, 160, 0.1); }
+
+/* Status - Chrome 83 compatible (no gap) */
+.status-bar { display: flex; display: -webkit-flex; align-items: center; }
+.status-bar > * { margin-left: 12px; }
+.status-bar > *:first-child { margin-left: 0; }
+
+/* Node selector - Chrome 83 compatible */
+.node-selector { display: flex; display: -webkit-flex; align-items: center; }
+.node-selector > * { margin-right: 6px; }
+.node-selector > *:last-child { margin-right: 0; }
+.node-selector select {
+    background: var(--bg-tertiary);
+    background-color: #1f2937;
+    border: 1px solid var(--border-color);
+    border-color: #2d3748;
+    border-radius: 8px;
+    -webkit-border-radius: 8px;
+    padding: 4px 8px;
+    color: var(--text-primary);
+    color: #f8fafc;
+    font-size: 0.75rem;
+    cursor: pointer;
+    max-width: 140px;
+    -webkit-appearance: menulist;
+    appearance: menulist;
+}
+.node-selector select:focus { outline: none; border-color: var(--accent-primary); border-color: #25c2a0; }
+.node-selector select option { background: #1f2937; color: #f8fafc; }
+
+/* Status dot with liveness indicator */
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--error);
+    position: relative;
+}
+.status-dot.connected { background: var(--success); }
+.status-dot.connecting { background: var(--warning); animation: pulse 1s ease-in-out infinite; }
+.status-dot.live::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    border-radius: 50%;
+    border: 2px solid var(--success);
+    animation: livePulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes livePulse { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.1); } }
+
+.connect-btn {
+    background: var(--accent-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    color: var(--bg-primary);
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+.connect-btn:hover { background: var(--accent-secondary); }
+.connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Main */
+.main { padding: var(--spacing-xl) 0; min-height: calc(100vh - 200px); }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Info boxes */
+.info-box {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    font-size: 0.875rem;
+}
+.info-box.success { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+.info-box.warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+.info-box.error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+.info-box h4 { color: var(--accent-secondary); margin-bottom: var(--spacing-sm); }
+.info-box code { background: var(--bg-tertiary); padding: 2px 6px; border-radius: var(--radius-sm); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+
+/* Cards */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.card-grid > * { margin-bottom: 24px; margin-right: 24px; }
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
+
+/* Pool cards */
+.pool-pair { display: flex; display: -webkit-flex; align-items: center; margin-bottom: var(--spacing-md); }
+.pool-pair > * { margin-right: var(--spacing-sm); }
+.pool-pair > *:last-child { margin-right: 0; }
+.pool-pair-icons { display: flex; display: -webkit-flex; }
+.pool-pair-icons .token-icon { width: 32px; height: 32px; margin-right: -8px; border: 2px solid var(--bg-card); border-radius: 50%; background: var(--bg-tertiary); display: flex; display: -webkit-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.7rem; overflow: hidden; }
+.pool-pair-icons .token-icon:last-child { margin-right: 0; }
+.pool-pair-icons .token-icon img { width: 100%; height: 100%; object-fit: cover; }
+.pool-pair-name { font-weight: 600; margin-left: var(--spacing-sm); }
+.pool-stats { display: grid; grid-template-columns: 1fr 1fr; }
+.pool-stats > * { margin-bottom: var(--spacing-sm); margin-right: var(--spacing-sm); }
+.pool-stat { padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm); }
+.pool-stat-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; }
+.pool-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; }
+.pool-stat-usd { font-size: 0.7rem; color: var(--text-muted); }
+.pool-stat.full-width { grid-column: 1 / -1; }
+.badge { font-size: 0.7rem; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--bg-tertiary); margin-left: auto; }
+.badge.green { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.badge.yellow { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+.badge.red { background: rgba(239, 68, 68, 0.2); color: var(--error); }
+
+/* Swap interface */
+.swap-container {
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+}
+.swap-header { display: flex; display: -webkit-flex; justify-content: space-between; margin-bottom: var(--spacing-lg); }
+.swap-header h3 { font-size: 1.125rem; }
+.swap-box {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+}
+.swap-box-header { display: flex; display: -webkit-flex; justify-content: space-between; margin-bottom: var(--spacing-sm); font-size: 0.875rem; color: var(--text-muted); }
+.swap-box-row { display: flex; display: -webkit-flex; align-items: center; }
+.swap-box-row > * { margin-right: var(--spacing-md); }
+.swap-box-row > *:last-child { margin-right: 0; }
+.swap-input {
+    flex: 1;
+    -webkit-flex: 1;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    outline: none;
+    min-width: 0;
+}
+.swap-input::placeholder { color: var(--text-muted); }
+.token-selector {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-flex-shrink: 0;
+}
+.token-selector > * { margin-right: var(--spacing-sm); }
+.token-selector > *:last-child { margin-right: 0; }
+.token-selector:hover { border-color: var(--accent-primary); }
+.token-selector .token-icon { width: 24px; height: 24px; border-radius: 50%; background: var(--bg-tertiary); display: flex; display: -webkit-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; overflow: hidden; }
+.token-selector .token-icon img { width: 100%; height: 100%; object-fit: cover; }
+.token-selector .token-info { display: flex; display: -webkit-flex; flex-direction: column; -webkit-flex-direction: column; }
+.token-selector .token-symbol { font-weight: 600; font-size: 0.875rem; }
+.token-selector .token-id { font-size: 0.7rem; color: var(--text-muted); }
+.swap-arrow { display: flex; display: -webkit-flex; justify-content: center; margin: var(--spacing-xs) 0; }
+.swap-arrow-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 4px solid var(--bg-card);
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+}
+.swap-arrow-btn:hover { background: var(--accent-primary); color: var(--bg-primary); }
+.swap-info {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+    font-size: 0.8125rem;
+}
+.swap-info-row { display: flex; display: -webkit-flex; justify-content: space-between; margin-bottom: var(--spacing-xs); }
+.swap-info-row:last-child { margin-bottom: 0; }
+.swap-info-label { color: var(--text-muted); }
+.swap-info-value { font-family: 'JetBrains Mono', monospace; }
+.btn-primary {
+    width: 100%;
+    padding: var(--spacing-md);
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-primary:hover { background: var(--accent-secondary); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; background: var(--bg-tertiary); color: var(--text-muted); }
+
+/* Modal - Chrome 83 compatible (no inset, no gap) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    background-color: rgba(0, 0, 0, 0.9);
+    display: none;
+    z-index: 9999;
+}
+.modal-overlay.active {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    -webkit-align-items: center;
+    justify-content: center;
+    -webkit-justify-content: center;
+}
+.modal {
+    background: #151d2e;
+    background-color: #151d2e;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    -webkit-border-radius: 12px;
+    width: 90%;
+    max-width: 420px;
+    max-height: 80vh;
+    overflow: hidden;
+    position: relative;
+    z-index: 10000;
+}
+.modal-header {
+    display: flex;
+    display: -webkit-flex;
+    justify-content: space-between;
+    -webkit-justify-content: space-between;
+    align-items: center;
+    -webkit-align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid #2d3748;
+}
+.modal-close {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 1.5rem;
+    padding: 8px;
+    line-height: 1;
+}
+.modal-close:hover { color: #f8fafc; }
+.modal-search { padding: 16px; border-bottom: 1px solid #2d3748; }
+.modal-search input {
+    width: 100%;
+    padding: 10px 14px;
+    background: #1f2937;
+    background-color: #1f2937;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    -webkit-border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.9rem;
+}
+.modal-search input:focus { outline: none; border-color: #25c2a0; }
+.token-list { overflow-y: auto; max-height: 350px; }
+.token-item {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    -webkit-align-items: center;
+    padding: 14px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(45, 55, 72, 0.5);
+}
+.token-item:hover { background: #1e293b; background-color: #1e293b; }
+.token-item:last-child { border-bottom: none; }
+.token-item > * { margin-right: 12px; }
+.token-item > *:last-child { margin-right: 0; }
+.token-item .token-icon { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-tertiary); display: flex; display: -webkit-flex; align-items: center; justify-content: center; font-weight: 600; overflow: hidden; }
+.token-item .token-icon img { width: 100%; height: 100%; object-fit: cover; }
+.token-item-info { flex: 1; -webkit-flex: 1; }
+.token-item-name { font-weight: 600; }
+.token-item-meta { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Form */
+.form-group { margin-bottom: var(--spacing-md); }
+.form-label { display: block; margin-bottom: var(--spacing-xs); font-size: 0.875rem; color: var(--text-secondary); }
+.form-input, .form-textarea {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: inherit;
+}
+.form-input:focus, .form-textarea:focus { outline: none; border-color: var(--accent-primary); }
+.form-textarea { min-height: 80px; resize: vertical; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; }
+.form-row > * { margin-right: var(--spacing-md); }
+.form-row > *:last-child { margin-right: 0; }
+.form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: var(--spacing-xs); }
+.color-input-wrapper { display: flex; display: -webkit-flex; align-items: center; }
+.color-input-wrapper > * { margin-right: var(--spacing-sm); }
+.color-input-wrapper > *:last-child { margin-right: 0; }
+.color-input-wrapper input[type="color"] { width: 40px; height: 36px; border: none; border-radius: var(--radius-sm); cursor: pointer; }
+
+/* Minter - Tabs */
+.minter-container { max-width: 800px; margin: 0 auto; }
+.minter-tabs { display: flex; display: -webkit-flex; margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-color); }
+.minter-tabs > * { margin-right: 0; }
+.minter-tab {
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+.minter-tab:hover { color: var(--text-primary); }
+.minter-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.minter-panel { display: none; }
+.minter-panel.active { display: block; }
+.minter-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--spacing-lg); }
+.minter-fee {
+    background: rgba(37, 194, 160, 0.1);
+    border: 1px solid rgba(37, 194, 160, 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin: var(--spacing-lg) 0;
+    display: flex;
+    display: -webkit-flex;
+    justify-content: space-between;
+}
+.minter-fee-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-primary); }
+
+/* Owned assets list */
+.owned-asset-item {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-sm);
+}
+.owned-asset-item > * { margin-right: var(--spacing-md); }
+.owned-asset-item > *:last-child { margin-right: 0; }
+.owned-asset-item .token-icon { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-card); }
+.owned-asset-info { flex: 1; -webkit-flex: 1; }
+.owned-asset-name { font-weight: 600; }
+.owned-asset-meta { font-size: 0.75rem; color: var(--text-muted); }
+.owned-asset-actions { display: flex; display: -webkit-flex; }
+.owned-asset-actions > * { margin-left: var(--spacing-sm); }
+.owned-asset-actions > *:first-child { margin-left: 0; }
+.btn-small {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+.btn-small:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.btn-small.primary { background: var(--accent-primary); color: var(--bg-primary); border-color: var(--accent-primary); }
+
+/* Section */
+.section { margin-bottom: var(--spacing-2xl); }
+.section-header { display: flex; display: -webkit-flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-lg); flex-wrap: wrap; }
+.section-header > * { margin-right: var(--spacing-md); }
+.section-header > *:last-child { margin-right: 0; }
+.section-header h2 { font-size: 1.5rem; }
+.section-desc { color: var(--text-secondary); margin-bottom: var(--spacing-lg); }
+
+/* Loading */
+.loading-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; color: var(--text-muted); }
+.spinner { width: 24px; height: 24px; border: 2px solid var(--border-color); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; margin-right: var(--spacing-sm); vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Recent trades - enhanced with logos */
+.trades-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.trade-row {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    transition: background var(--transition-fast);
+}
+.trade-row:hover { background: var(--bg-hover); }
+.trade-row:last-child { border-bottom: none; }
+.trade-block {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    min-width: 70px;
+    margin-right: 12px;
+}
+.trade-type-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    margin-right: 12px;
+    min-width: 65px;
+    text-align: center;
+}
+.trade-type-badge.trade { background: rgba(37, 194, 160, 0.2); color: var(--accent-primary); }
+.trade-type-badge.addliquidity, .trade-type-badge.add { background: rgba(168, 85, 247, 0.2); color: var(--accent-purple); }
+.trade-type-badge.withdraw, .trade-type-badge.remove { background: rgba(249, 115, 22, 0.2); color: var(--accent-orange); }
+.trade-type-badge.poolcreate, .trade-type-badge.create { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
+.trade-pair {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    flex: 1;
+    -webkit-flex: 1;
+}
+.trade-pair-icons {
+    display: flex;
+    display: -webkit-flex;
+    margin-right: 12px;
+}
+.trade-pair-icons .trade-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--bg-card);
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 600;
+    overflow: hidden;
+}
+.trade-pair-icons .trade-icon:last-child { margin-left: -10px; }
+.trade-pair-icons .trade-icon img { width: 100%; height: 100%; object-fit: cover; }
+.trade-amounts {
+    display: flex;
+    display: -webkit-flex;
+    flex-direction: column;
+    -webkit-flex-direction: column;
+}
+.trade-amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+}
+.trade-amount > * { margin-right: 4px; }
+.trade-amount > *:last-child { margin-right: 0; }
+.trade-amount.in { color: var(--success); }
+.trade-amount.out { color: var(--error); }
+.trade-amount .symbol { color: var(--text-secondary); font-size: 0.7rem; }
+
+/* New trade row - arrow format */
+.trade-flow {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    flex: 1;
+    -webkit-flex: 1;
+}
+.trade-flow > * { margin-right: 8px; }
+.trade-flow > *:last-child { margin-right: 0; }
+.trade-token {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    background: var(--bg-tertiary);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+}
+.trade-token > * { margin-right: 6px; }
+.trade-token > *:last-child { margin-right: 0; }
+.trade-token .trade-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    font-weight: 600;
+    overflow: hidden;
+}
+.trade-token .trade-icon img { width: 100%; height: 100%; object-fit: cover; }
+.trade-token-amount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+.trade-token-symbol {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+.trade-token-id {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+}
+.trade-arrow {
+    color: var(--text-muted);
+    font-size: 1rem;
+}
+.trade-row.buy .trade-token:last-child { border: 1px solid rgba(16, 185, 129, 0.3); }
+.trade-row.sell .trade-token:first-child { border: 1px solid rgba(239, 68, 68, 0.3); }
+.trade-fee {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    min-width: 60px;
+    text-align: right;
+}
+
+/* Liquidity modal */
+.liquidity-modal-body {
+    max-height: calc(80vh - 60px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+.pool-info-row.clickable {
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+.pool-info-row.clickable:hover {
+    background: rgba(37, 194, 160, 0.1);
+    margin: 0 -12px;
+    padding: 6px 12px;
+}
+.pool-info-row.clickable .pool-info-value::after {
+    content: ' ⇄';
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+.liquidity-tabs {
+    display: flex;
+    display: -webkit-flex;
+    border-bottom: 1px solid var(--border-color);
+}
+.liquidity-tab {
+    flex: 1;
+    -webkit-flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+}
+.liquidity-tab:hover { color: var(--text-primary); }
+.liquidity-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.liquidity-content { padding: 16px; }
+.liquidity-panel { display: none; }
+.liquidity-panel.active { display: block; }
+.pool-info-card {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+.pool-info-row {
+    display: flex;
+    display: -webkit-flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+.pool-info-row:not(:last-child) { border-bottom: 1px solid rgba(45, 55, 72, 0.5); }
+.pool-info-label { color: var(--text-muted); }
+.pool-info-value { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); }
+.liquidity-input-group { margin-bottom: 12px; }
+.liquidity-input-label {
+    display: flex;
+    display: -webkit-flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.liquidity-input-row {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+}
+.liquidity-input-row > * { margin-right: 10px; }
+.liquidity-input-row > *:last-child { margin-right: 0; }
+.liquidity-input {
+    flex: 1;
+    -webkit-flex: 1;
+    background: transparent;
+    border: none;
+    font-size: 1.1rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-primary);
+    outline: none;
+    min-width: 0;
+}
+.liquidity-input::placeholder { color: var(--text-muted); }
+.liquidity-token {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+}
+.liquidity-token > * { margin-right: 6px; }
+.liquidity-token > *:last-child { margin-right: 0; }
+.liquidity-token .token-icon { width: 20px; height: 20px; }
+.liquidity-token-symbol { font-weight: 600; font-size: 0.85rem; }
+.liquidity-share {
+    background: rgba(37, 194, 160, 0.1);
+    border: 1px solid rgba(37, 194, 160, 0.3);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    margin: 12px 0;
+    text-align: center;
+}
+.liquidity-share-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+.liquidity-share-value { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; color: var(--accent-primary); }
+.btn-liquidity {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 8px;
+}
+.btn-liquidity.add { background: var(--accent-primary); color: var(--bg-primary); }
+.btn-liquidity.add:hover { background: var(--accent-secondary); }
+.btn-liquidity.remove { background: var(--accent-orange); color: var(--bg-primary); }
+.btn-liquidity.remove:hover { background: #ea580c; }
+.btn-liquidity:disabled { opacity: 0.5; cursor: not-allowed; }
+.liquidity-link {
+    display: inline-block;
+    margin-left: 12px;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+.liquidity-link:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* Create Pool modal */
+.create-pool-content { padding: 16px; }
+.create-pool-pair {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+}
+.create-pool-pair > * { margin-right: 12px; }
+.create-pool-pair > *:last-child { margin-right: 0; }
+.create-pool-pair .token-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    overflow: hidden;
+}
+.create-pool-pair .token-icon img { width: 100%; height: 100%; object-fit: cover; }
+.create-pool-pair .pair-arrow { color: var(--text-muted); font-size: 1.2rem; }
+.create-pool-pair .pair-name { font-weight: 600; font-size: 1.1rem; }
+.fee-options { margin-bottom: 16px; }
+.fee-option {
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.fee-option:hover { border-color: var(--accent-primary); }
+.fee-option.selected { border-color: var(--accent-primary); background: rgba(37, 194, 160, 0.1); }
+.fee-option > * { margin-right: 12px; }
+.fee-option > *:last-child { margin-right: 0; }
+.fee-option input[type="radio"] { display: none; }
+.fee-radio {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-radius: 50%;
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+}
+.fee-option.selected .fee-radio { border-color: var(--accent-primary); }
+.fee-option.selected .fee-radio::after {
+    content: '';
+    width: 10px;
+    height: 10px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+}
+.fee-info { flex: 1; -webkit-flex: 1; }
+.fee-label { font-weight: 600; font-size: 0.95rem; }
+.fee-desc { font-size: 0.75rem; color: var(--text-muted); }
+.fee-percent { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-primary); }
+.btn-create-pool {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent-purple);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-create-pool:hover { background: #9333ea; }
+.btn-create-pool:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Notification toast */
+.notification-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+    max-width: 90%;
+}
+.notification-toast > * { margin-right: var(--spacing-md); }
+.notification-toast > *:last-child { margin-right: 0; }
+.notification-toast.success { border-color: var(--success); }
+.notification-toast.error { border-color: var(--error); }
+.notification-toast.info { border-color: var(--accent-secondary); }
+.notification-toast button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.notification-toast button:hover { color: var(--text-primary); }
+@keyframes slideUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Footer */
+.footer { background: var(--bg-secondary); border-top: 1px solid var(--border-color); padding: var(--spacing-lg) 0; }
+.footer-content { display: flex; display: -webkit-flex; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 0.8125rem; color: var(--text-muted); }
+.footer-content > * { margin-right: 16px; }
+.footer-content > *:last-child { margin-right: 0; }
+.footer-status { display: flex; display: -webkit-flex; align-items: center; }
+.footer-status-item { display: flex; display: -webkit-flex; align-items: center; margin-left: 24px; }
+.footer-status-item:first-child { margin-left: 0; }
+.footer-status-item > * { margin-right: 4px; }
+.footer-status-item > *:last-child { margin-right: 0; }
+
+/* Debug panel */
+.debug-fab {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    color: var(--text-muted);
+    cursor: pointer;
+    z-index: 150;
+    display: flex;
+    display: -webkit-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+.debug-fab:hover { background: var(--accent-primary); color: var(--bg-primary); border-color: var(--accent-primary); }
+.debug-panel {
+    position: fixed;
+    bottom: 140px;
+    right: 20px;
+    width: 600px;
+    max-width: calc(100vw - 40px);
+    max-height: 500px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    display: none;
+    flex-direction: column;
+    -webkit-flex-direction: column;
+    z-index: 150;
+    box-shadow: var(--shadow-lg);
+}
+.debug-panel.active { display: flex; display: -webkit-flex; }
+.debug-header { display: flex; display: -webkit-flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm) var(--spacing-md); border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.debug-header h4 { font-size: 0.875rem; color: var(--accent-primary); }
+.debug-header button { background: var(--bg-tertiary); border: none; color: var(--text-muted); cursor: pointer; font-size: 0.7rem; padding: 4px 8px; border-radius: var(--radius-sm); margin-left: 4px; }
+.debug-header button:hover { background: var(--accent-primary); color: var(--bg-primary); }
+.debug-body { flex: 1; -webkit-flex: 1; overflow-y: auto; padding: var(--spacing-sm); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; line-height: 1.5; }
+.debug-entry { padding: var(--spacing-sm); margin-bottom: var(--spacing-xs); background: var(--bg-tertiary); border-radius: var(--radius-sm); white-space: pre-wrap; word-break: break-all; }
+.debug-entry.request { border-left: 3px solid var(--accent-secondary); }
+.debug-entry.response { border-left: 3px solid var(--success); }
+.debug-entry.error { border-left: 3px solid var(--error); background: rgba(239, 68, 68, 0.1); }
+.debug-entry.info { border-left: 3px solid var(--accent-purple); }
+.debug-entry.warn { border-left: 3px solid var(--warning); background: rgba(245, 158, 11, 0.1); }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header-content { justify-content: center; }
+    .nav { width: 100%; justify-content: center; }
+    .card-grid { grid-template-columns: 1fr; }
+    .swap-container { max-width: 100%; }
+    .form-row { grid-template-columns: 1fr; }
+    .debug-panel { width: calc(100% - 40px); left: 20px; right: 20px; }
+}
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+                        <path d="M10 16L14 20L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    <span>BEAM All-in-One</span>
+                </div>
+                <nav class="nav">
+                    <span class="nav-link active" data-page="swap" onclick="showPage('swap')">Swap</span>
+                    <span class="nav-link" data-page="pools" onclick="showPage('pools')">Pools</span>
+                    <span class="nav-link" data-page="minter" onclick="showPage('minter')">Minter</span>
+                </nav>
+                <div class="status-bar">
+                    <div class="node-selector">
+                        <span class="status-dot" id="nodeStatusDot" title="Explorer API Status"></span>
+                        <select id="nodeSelect" onchange="changeNode()" title="Data Source">
+                            <option value="https://explorer.0xmx.net/api">explorer.0xmx.net</option>
+                            <option value="https://explorer-api.beamprivacy.com">explorer-api.beamprivacy.com</option>
+                            <option value="https://BeamSmart.net:8000">BeamSmart.net</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                    </div>
+                    <span class="status-dot" id="statusDot" title="Wallet Status"></span>
+                    <button class="connect-btn" id="connectBtn" onclick="connectWallet()">Connect</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <!-- SWAP PAGE -->
+            <div id="page-swap" class="page active">
+                <div class="swap-container">
+                    <div class="swap-header">
+                        <h3>Swap Tokens</h3>
+                        <span class="liquidity-link" onclick="openLiquidityModal()" title="Add or remove liquidity">+ Liquidity</span>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>What is swapping?</strong><br>
+                        Exchange one token for another instantly using decentralized liquidity pools.
+                        No account needed - your privacy is protected by BEAM's technology.
+                    </div>
+
+                    <div class="swap-box">
+                        <div class="swap-box-header">
+                            <span>You Pay</span>
+                            <span class="swap-box-hint">Enter the amount you want to spend</span>
+                        </div>
+                        <div class="swap-box-row">
+                            <input type="text" class="swap-input" id="fromAmount" placeholder="0" oninput="onAmountChange()">
+                            <div class="token-selector" id="fromToken" onclick="openTokenModal('from')">
+                                <div class="token-icon" id="fromTokenIcon">?</div>
+                                <div class="token-info">
+                                    <span class="token-symbol" id="fromTokenSymbol">Select</span>
+                                    <span class="token-id" id="fromTokenId"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="swap-arrow">
+                        <button class="swap-arrow-btn" onclick="swapTokens()" title="Swap direction">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="swap-box">
+                        <div class="swap-box-header">
+                            <span>You Receive</span>
+                            <span class="swap-box-hint">Estimated amount after fees</span>
+                        </div>
+                        <div class="swap-box-row">
+                            <input type="text" class="swap-input" id="toAmount" placeholder="0" readonly>
+                            <div class="token-selector" id="toToken" onclick="openTokenModal('to')">
+                                <div class="token-icon" id="toTokenIcon">?</div>
+                                <div class="token-info">
+                                    <span class="token-symbol" id="toTokenSymbol">Select</span>
+                                    <span class="token-id" id="toTokenId"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="swap-info" id="swapInfo" style="display: none;">
+                        <div class="swap-info-row">
+                            <span class="swap-info-label">Exchange Rate</span>
+                            <span class="swap-info-value" id="swapRate">-</span>
+                        </div>
+                        <div class="swap-info-row">
+                            <span class="swap-info-label">You Pay</span>
+                            <span class="swap-info-value" id="swapPay">-</span>
+                        </div>
+                        <div class="swap-info-row">
+                            <span class="swap-info-label">You Receive</span>
+                            <span class="swap-info-value" id="swapReceive">-</span>
+                        </div>
+                        <div class="swap-info-row">
+                            <span class="swap-info-label">Pool Fee (0.3%)</span>
+                            <span class="swap-info-value" id="swapFee">-</span>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" id="swapBtn" onclick="handleSwap()" disabled>Select tokens to swap</button>
+                </div>
+
+                <!-- Recent Trades -->
+                <div class="section" style="margin-top: var(--spacing-2xl);">
+                    <div class="section-header">
+                        <h2>Recent DEX Activity</h2>
+                    </div>
+                    <div id="recentTrades" class="loading-card">
+                        <span class="spinner"></span> Loading recent trades from blockchain...
+                    </div>
+                </div>
+            </div>
+
+            <!-- POOLS PAGE -->
+            <div id="page-pools" class="page">
+                <section class="section">
+                    <div class="section-header">
+                        <h2>Liquidity Pools</h2>
+                        <div style="display: flex; display: -webkit-flex; align-items: center;">
+                            <span style="margin-right: 12px; font-size: 0.8rem; color: var(--text-muted);">BEAM: <strong id="beamPriceDisplay">$-</strong></span>
+                            <button class="connect-btn" onclick="loadPoolsData()">Refresh</button>
+                        </div>
+                    </div>
+                    <div class="info-box">
+                        <strong>What are liquidity pools?</strong><br>
+                        Pools hold reserves of two tokens that enable instant swaps.
+                        Liquidity providers earn fees from every trade. Click any pool to start swapping.
+                        <br><strong>Sorted by BEAM reserve</strong> - highest liquidity pools first.
+                    </div>
+                    <div class="card-grid" id="poolsList">
+                        <div class="loading-card"><span class="spinner"></span> Loading pools...</div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- MINTER PAGE -->
+            <div id="page-minter" class="page">
+                <div class="minter-container">
+                    <div class="section-header">
+                        <h2>Token Minter</h2>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>BEAM Confidential Asset Minter</strong><br>
+                        Create, manage, and mint tokens on BEAM blockchain with built-in privacy features.
+                    </div>
+
+                    <!-- Minter Tabs -->
+                    <div class="minter-tabs">
+                        <button class="minter-tab active" onclick="showMinterTab('create')">Create Token</button>
+                        <button class="minter-tab" onclick="showMinterTab('owned')">My Tokens</button>
+                        <button class="minter-tab" onclick="showMinterTab('mint')">Mint / Withdraw</button>
+                    </div>
+
+                    <!-- CREATE TAB -->
+                    <div id="minter-create" class="minter-panel active">
+                        <div class="minter-card">
+                            <div class="info-box success">
+                                <h4>How to add a logo to your token</h4>
+                                <ol style="margin: 8px 0 0 20px; line-height: 1.8;">
+                                    <li>Go to <a href="https://nft.storage" target="_blank">nft.storage</a> (free, decentralized)</li>
+                                    <li>Upload your logo (PNG or SVG, square shape recommended)</li>
+                                    <li>Copy the IPFS URL and paste it below</li>
+                                </ol>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Token Name *</label>
+                                    <input type="text" class="form-input" id="tokenName" placeholder="e.g. My Token">
+                                    <div class="form-hint">The full name (like "Bitcoin" or "Ethereum")</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Ticker Symbol *</label>
+                                    <input type="text" class="form-input" id="tokenShortName" placeholder="e.g. MTK" maxlength="6" style="text-transform: uppercase;">
+                                    <div class="form-hint">Short code (like BTC, ETH) - max 6 characters</div>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Unit Name *</label>
+                                    <input type="text" class="form-input" id="tokenUnit" placeholder="e.g. Token">
+                                    <div class="form-hint">Name for one whole unit (like "Dollar")</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Smallest Unit Name *</label>
+                                    <input type="text" class="form-input" id="tokenSmallUnit" placeholder="e.g. Cent">
+                                    <div class="form-hint">Name for smallest fraction (like "Cent")</div>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Total Supply *</label>
+                                    <input type="number" class="form-input" id="tokenSupply" placeholder="e.g. 1000000">
+                                    <div class="form-hint">Maximum tokens that can ever exist</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Decimal Places</label>
+                                    <input type="number" class="form-input" id="tokenDecimals" value="8" min="0" max="18">
+                                    <div class="form-hint">Usually 8 (like BEAM) or 18 (like Ethereum)</div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Logo URL (optional)</label>
+                                <input type="text" class="form-input" id="tokenLogo" placeholder="https://... or ipfs://...">
+                                <div class="form-hint">Direct link to your token's image file</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Short Description (optional)</label>
+                                <input type="text" class="form-input" id="tokenShortDesc" placeholder="Brief tagline" maxlength="128">
+                                <div class="form-hint">One-liner description (max 128 characters)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Full Description (optional)</label>
+                                <textarea class="form-textarea" id="tokenLongDesc" placeholder="Detailed description of your token..." maxlength="1024"></textarea>
+                                <div class="form-hint">Detailed description (max 1024 characters)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Brand Color (optional)</label>
+                                <div class="color-input-wrapper">
+                                    <input type="color" id="tokenColorPicker" value="#25c2a0" onchange="document.getElementById('tokenColor').value = this.value">
+                                    <input type="text" class="form-input" id="tokenColor" value="#25c2a0" maxlength="7">
+                                </div>
+                                <div class="form-hint">Color used to display your token</div>
+                            </div>
+
+                            <div class="minter-fee">
+                                <div>
+                                    <strong>Creation Fee</strong>
+                                    <div class="form-hint">Paid to the network treasury (non-refundable)</div>
+                                </div>
+                                <span class="minter-fee-value">60 BEAM</span>
+                            </div>
+
+                            <button class="btn-primary" id="createBtn" onclick="createToken()">Create Token</button>
+                        </div>
+                    </div>
+
+                    <!-- OWNED TOKENS TAB -->
+                    <div id="minter-owned" class="minter-panel">
+                        <div class="minter-card">
+                            <div id="ownedTokensList" class="loading-card">
+                                <span class="spinner"></span> Loading your tokens...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MINT/WITHDRAW TAB -->
+                    <div id="minter-mint" class="minter-panel">
+                        <div class="minter-card">
+                            <div class="info-box">
+                                <strong>Mint or Withdraw Tokens</strong><br>
+                                If you are the owner of a token, you can mint additional tokens up to the supply limit.
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Asset ID *</label>
+                                <input type="number" class="form-input" id="mintAssetId" placeholder="e.g. 174">
+                                <div class="form-hint">The ID of your token (shown in My Tokens tab)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Amount *</label>
+                                <input type="number" class="form-input" id="mintAmount" placeholder="e.g. 1000">
+                                <div class="form-hint">Amount to mint (in whole tokens, will be converted to groth)</div>
+                            </div>
+
+                            <div id="mintAssetInfo" style="display: none; margin-bottom: var(--spacing-lg);">
+                                <div class="pool-stat full-width">
+                                    <div class="pool-stat-label">Asset Info</div>
+                                    <div class="pool-stat-value" id="mintAssetDetails">-</div>
+                                </div>
+                            </div>
+
+                            <button class="btn-primary" id="mintBtn" onclick="mintTokens()">Mint Tokens</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <span>BEAM All-in-One - DEX | Minter - Powered by BEAM Privacy</span>
+                <div class="footer-status">
+                    <div class="footer-status-item">
+                        <span class="status-dot" id="footerStatusDot"></span>
+                        <span id="footerStatus">Disconnected</span>
+                    </div>
+                    <div class="footer-status-item">
+                        <span>Block:</span>
+                        <span style="font-family: 'JetBrains Mono', monospace;" id="blockHeight">-</span>
+                    </div>
+                    <div class="footer-status-item">
+                        <span>Pools:</span>
+                        <span style="font-family: 'JetBrains Mono', monospace;" id="poolCount">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Token Modal -->
+    <div class="modal-overlay" id="tokenModal" onclick="if(event.target === this) closeTokenModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Select Token</h3>
+                <button class="modal-close" onclick="closeTokenModal()">&times;</button>
+            </div>
+            <div class="modal-search">
+                <input type="text" id="tokenSearch" placeholder="Search by name or ID..." oninput="filterTokens()">
+            </div>
+            <div class="token-list" id="tokenList"></div>
+        </div>
+    </div>
+
+    <!-- Liquidity Modal -->
+    <div class="modal-overlay" id="liquidityModal" onclick="if(event.target === this) closeLiquidityModal()">
+        <div class="modal" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3 id="liquidityModalTitle">Manage Liquidity</h3>
+                <button class="modal-close" onclick="closeLiquidityModal()">&times;</button>
+            </div>
+
+            <div class="liquidity-modal-body">
+                <!-- Pool Info Card -->
+                <div class="liquidity-content" style="padding-bottom: 0;">
+                    <div class="pool-info-card" id="liquidityPoolInfo">
+                        <div class="pool-info-row">
+                            <span class="pool-info-label">Pool</span>
+                            <span class="pool-info-value" id="liqPoolPair">-</span>
+                        </div>
+                        <div class="pool-info-row">
+                            <span class="pool-info-label">Reserve 1</span>
+                            <span class="pool-info-value" id="liqReserve1">-</span>
+                        </div>
+                        <div class="pool-info-row">
+                            <span class="pool-info-label">Reserve 2</span>
+                            <span class="pool-info-value" id="liqReserve2">-</span>
+                        </div>
+                        <div class="pool-info-row clickable" onclick="toggleLiquidityRate()" title="Click to toggle rate">
+                            <span class="pool-info-label">Exchange Rate</span>
+                            <span class="pool-info-value" id="liqRate">-</span>
+                        </div>
+                        <div class="pool-info-row">
+                            <span class="pool-info-label">LP Token ID</span>
+                            <span class="pool-info-value" id="liqLpToken">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="liquidity-tabs">
+                <button class="liquidity-tab active" onclick="showLiquidityTab('add')">Add Liquidity</button>
+                <button class="liquidity-tab" onclick="showLiquidityTab('remove')">Remove Liquidity</button>
+            </div>
+
+            <div class="liquidity-content">
+                <!-- Add Liquidity Panel -->
+                <div id="liq-add" class="liquidity-panel active">
+                    <div class="liquidity-input-group">
+                        <div class="liquidity-input-label">
+                            <span>Amount</span>
+                            <span id="liqBalance1">Balance: -</span>
+                        </div>
+                        <div class="liquidity-input-row">
+                            <input type="text" class="liquidity-input" id="liqAmount1" placeholder="0.0" oninput="onLiquidityAmountChange(1)">
+                            <div class="liquidity-token">
+                                <div class="token-icon" id="liqIcon1">?</div>
+                                <span class="liquidity-token-symbol" id="liqSymbol1">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; color: var(--text-muted); font-size: 1.2rem; margin: 8px 0;">+</div>
+
+                    <div class="liquidity-input-group">
+                        <div class="liquidity-input-label">
+                            <span>Amount</span>
+                            <span id="liqBalance2">Balance: -</span>
+                        </div>
+                        <div class="liquidity-input-row">
+                            <input type="text" class="liquidity-input" id="liqAmount2" placeholder="0.0" oninput="onLiquidityAmountChange(2)">
+                            <div class="liquidity-token">
+                                <div class="token-icon" id="liqIcon2">?</div>
+                                <span class="liquidity-token-symbol" id="liqSymbol2">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="liquidity-share">
+                        <div class="liquidity-share-label">Estimated LP Tokens</div>
+                        <div class="liquidity-share-value" id="liqEstimatedLp">-</div>
+                    </div>
+
+                    <button class="btn-liquidity add" id="addLiquidityBtn" onclick="addLiquidity()" disabled>Enter amounts</button>
+                </div>
+
+                <!-- Remove Liquidity Panel -->
+                <div id="liq-remove" class="liquidity-panel">
+                    <div class="liquidity-input-group">
+                        <div class="liquidity-input-label">
+                            <span>LP Tokens to Burn</span>
+                            <span id="liqLpBalance">Your LP: -</span>
+                        </div>
+                        <div class="liquidity-input-row">
+                            <input type="text" class="liquidity-input" id="liqRemoveAmount" placeholder="0.0" oninput="onRemoveAmountChange()">
+                            <div class="liquidity-token">
+                                <div class="token-icon">LP</div>
+                                <span class="liquidity-token-symbol" id="liqRemoveLpSymbol">LP</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="liquidity-share" style="background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3);">
+                        <div class="liquidity-share-label">You Will Receive</div>
+                        <div class="liquidity-share-value" id="liqRemoveReceive" style="color: var(--accent-orange);">-</div>
+                    </div>
+
+                    <button class="btn-liquidity remove" id="removeLiquidityBtn" onclick="removeLiquidity()" disabled>Enter amount</button>
+                </div>
+            </div>
+            </div><!-- end liquidity-modal-body -->
+        </div>
+    </div>
+
+    <!-- Create Pool Modal -->
+    <div class="modal-overlay" id="createPoolModal" onclick="if(event.target === this) closeCreatePoolModal()">
+        <div class="modal" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3>Create New Pool</h3>
+                <button class="modal-close" onclick="closeCreatePoolModal()">&times;</button>
+            </div>
+            <div class="create-pool-content">
+                <div class="create-pool-pair">
+                    <div class="token-icon" id="createPoolIcon1">?</div>
+                    <span class="pair-arrow">↔</span>
+                    <div class="token-icon" id="createPoolIcon2">?</div>
+                    <span class="pair-name" id="createPoolPairName">-</span>
+                </div>
+
+                <div class="info-box" style="margin-bottom: 16px;">
+                    <strong>No pool exists for this pair</strong><br>
+                    Create a new liquidity pool and earn fees from trades. Choose the fee tier below.
+                </div>
+
+                <div class="fee-options">
+                    <div class="fee-option selected" onclick="selectPoolFee(2)">
+                        <div class="fee-radio"></div>
+                        <div class="fee-info">
+                            <div class="fee-label">Standard</div>
+                            <div class="fee-desc">Best for most pairs</div>
+                        </div>
+                        <span class="fee-percent">0.3%</span>
+                    </div>
+                    <div class="fee-option" onclick="selectPoolFee(1)">
+                        <div class="fee-radio"></div>
+                        <div class="fee-info">
+                            <div class="fee-label">Stable</div>
+                            <div class="fee-desc">For stablecoins & pegged assets</div>
+                        </div>
+                        <span class="fee-percent">0.1%</span>
+                    </div>
+                    <div class="fee-option" onclick="selectPoolFee(0)">
+                        <div class="fee-radio"></div>
+                        <div class="fee-info">
+                            <div class="fee-label">Volatile</div>
+                            <div class="fee-desc">For high volatility pairs</div>
+                        </div>
+                        <span class="fee-percent">1.0%</span>
+                    </div>
+                </div>
+
+                <button class="btn-create-pool" id="createPoolBtn" onclick="createPool()">Create Pool</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <button class="debug-fab" onclick="toggleDebug()" title="Debug Panel">🔧</button>
+    <div class="debug-panel" id="debugPanel">
+        <div class="debug-header">
+            <h4>Debug Log</h4>
+            <div>
+                <button onclick="clearDebug()">Clear</button>
+                <button onclick="copyDebug()">Copy</button>
+            </div>
+        </div>
+        <div class="debug-body" id="debugBody"></div>
+    </div>
+
+<script>
+// ==================== CONFIGURATION ====================
+const DEX_CID = '729fe098d9fd2b57705db1a05a74103dd4b891f535aef2ae69b47bcfdeef9cbf';
+const MINTER_CID = '295fe749dc12c55213d1bd16ced174dc8780c020f59cb17749e900bb0c15d868';
+let EXPLORER_API = 'https://explorer.0xmx.net/api';
+const BEAM_DECIMALS = 8;
+const BEAM_ASSET_ID = 0;
+
+// Priority tokens - always shown first in dropdowns
+const PRIORITY_TOKENS = [
+    { aid: 0, name: 'BEAM', symbol: 'BEAM', decimals: 8 },
+    { aid: 7, name: 'BeamX', symbol: 'BEAMX', decimals: 8 },
+    { aid: 47, name: 'Nephrit', symbol: 'NPH', decimals: 8 },
+    { aid: 174, name: 'FOMO', symbol: 'FOMO', decimals: 8 }
+];
+
+// Default swap pair: BEAM -> BeamX
+const DEFAULT_FROM_ASSET = 0;
+const DEFAULT_TO_ASSET = 7;
+const DEFAULT_AMOUNT = 100;
+
+// Local asset icons
+const ASSET_ICONS = {
+    0: 'assets/logos/beam.svg',
+    7: 'assets/logos/beamx.png',
+    47: 'assets/logos/nph.svg',
+    174: 'assets/logos/fomo.png',
+    4: 'assets/logos/crown.ico',
+    9: 'assets/logos/tico.ico'
+};
+
+const NO_ICON_PATH = 'assets/logos/no-icon.svg';
+
+// ==================== STATE ====================
+let BEAM = null;
+let isConnected = false;
+let walletType = null;
+let assets = new Map();
+let pools = [];
+let fromAsset = null;
+let toAsset = null;
+let currentQuote = null;
+let quoteTimeout = null;
+let tokenModalTarget = null;
+let debugEnabled = false;
+let ammShader = null;
+let minterShader = null;
+let beamPriceUsd = 0;
+let explorerLive = false;
+
+// ==================== DEBUG LOGGING ====================
+const DEBUG_MAX_CHARS = 200;
+
+function log(type, msg, data) {
+    const debugBody = document.getElementById('debugBody');
+    if (!debugBody) return;
+
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const entry = document.createElement('div');
+    entry.className = 'debug-entry ' + type;
+
+    let displayData = '';
+    if (data !== undefined && data !== null) {
+        try {
+            const fullData = typeof data === 'string' ? data : JSON.stringify(data);
+            if (fullData.length > DEBUG_MAX_CHARS) {
+                displayData = fullData.slice(0, DEBUG_MAX_CHARS) + '...';
+            } else {
+                displayData = fullData;
+            }
+        } catch(e) {
+            displayData = String(data).slice(0, DEBUG_MAX_CHARS);
+        }
+    }
+
+    entry.innerHTML = `<strong>[${time}] [${type.toUpperCase()}]</strong> ${escapeHtml(msg)}` +
+        (displayData ? ` <span style="color:var(--text-muted)">${escapeHtml(displayData)}</span>` : '');
+
+    debugBody.insertBefore(entry, debugBody.firstChild);
+    while (debugBody.children.length > 100) debugBody.removeChild(debugBody.lastChild);
+    console.log(`[${type.toUpperCase()}] ${msg}`, data !== undefined ? data : '');
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function toggleDebug() {
+    debugEnabled = !debugEnabled;
+    document.getElementById('debugPanel').classList.toggle('active', debugEnabled);
+}
+
+function clearDebug() { document.getElementById('debugBody').innerHTML = ''; }
+
+function copyDebug() {
+    const text = document.getElementById('debugBody').innerText;
+    navigator.clipboard.writeText(text).then(() => showNotification('Copied to clipboard!', 'success'));
+}
+
+// ==================== EXPLORER API ====================
+async function fetchExplorer(endpoint, params = {}) {
+    const url = new URL(`${EXPLORER_API}${endpoint}`);
+    Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.append(k, v));
+    log('request', `Explorer: ${endpoint}`, params);
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const resp = await fetch(url.toString(), { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        log('response', `Explorer: ${endpoint} OK`, data);
+        return data;
+    } catch (e) {
+        log('error', `Explorer: ${endpoint} FAILED`, e.message);
+        throw e;
+    }
+}
+
+async function loadExplorerStatus() {
+    try {
+        const status = await fetchExplorer('/status');
+        if (status.height) {
+            document.getElementById('blockHeight').textContent = status.height.toLocaleString();
+            updateNodeStatus(true);
+        }
+        return status;
+    } catch (e) {
+        updateNodeStatus(false);
+        log('warn', 'Explorer status unavailable');
+    }
+}
+
+function updateNodeStatus(live) {
+    explorerLive = live;
+    const dot = document.getElementById('nodeStatusDot');
+    if (dot) {
+        dot.className = live ? 'status-dot connected live' : 'status-dot';
+        dot.title = live ? 'Explorer connected & live' : 'Explorer disconnected';
+    }
+}
+
+async function loadExplorerAssets() {
+    try {
+        const resp = await fetchExplorer('/assets');
+
+        if (!assets.has(0)) {
+            assets.set(0, { aid: 0, name: 'BEAM', symbol: 'BEAM', decimals: 8, icon: ASSET_ICONS[0] });
+        }
+
+        let assetRows = [];
+        if (resp?.type === 'table' && Array.isArray(resp.value) && resp.value.length > 1) {
+            const headers = resp.value[0].map(h => h?.value || h);
+            for (let i = 1; i < resp.value.length; i++) {
+                const row = resp.value[i];
+                if (!Array.isArray(row)) continue;
+                const obj = {};
+                headers.forEach((h, idx) => {
+                    const cell = row[idx];
+                    obj[h] = cell?.value !== undefined ? cell.value : cell;
+                });
+                assetRows.push(obj);
+            }
+        } else if (Array.isArray(resp)) {
+            assetRows = resp;
+        }
+
+        for (const a of assetRows) {
+            const aid = a.Aid ?? a.id ?? a.aid;
+            if (aid === undefined || aid === null) continue;
+
+            let name = `Asset ${aid}`;
+            let symbol = `A${aid}`;
+            let decimals = 8;
+
+            const metadata = a.Metadata || a.metadata;
+            if (metadata) {
+                const pairs = parseMetadata(metadata);
+                name = pairs.N || name;
+                symbol = pairs.SN || pairs.UN || symbol;
+                if (pairs.NTH_RATIO) {
+                    const ratio = parseInt(pairs.NTH_RATIO);
+                    if (ratio > 0) decimals = Math.log10(ratio);
+                }
+            }
+
+            assets.set(aid, {
+                aid, name, symbol, decimals,
+                icon: ASSET_ICONS[aid] || null,
+                supply: a.Supply,
+                deposit: a.Deposit
+            });
+        }
+
+        log('info', `Total assets: ${assets.size}`);
+        return assets;
+    } catch (e) {
+        log('warn', 'Explorer assets unavailable', e.message);
+    }
+}
+
+function parseMetadata(metadata) {
+    const pairs = {};
+    if (!metadata) return pairs;
+    const parts = metadata.split(';');
+    for (const part of parts) {
+        const eq = part.indexOf('=');
+        if (eq > 0) pairs[part.slice(0, eq)] = part.slice(eq + 1);
+    }
+    return pairs;
+}
+
+async function loadRecentTrades() {
+    const container = document.getElementById('recentTrades');
+    try {
+        const resp = await fetchExplorer('/contract', { id: DEX_CID, state: 1, nMaxTxs: 30 });
+        if (!resp) {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No data from Explorer</div>';
+            return;
+        }
+
+        const callsHistory = resp['Calls history'];
+        let trades = [];
+
+        if (callsHistory?.value && Array.isArray(callsHistory.value) && callsHistory.value.length > 1) {
+            const headers = callsHistory.value[0].map(h => h?.value || h);
+
+            for (let i = 1; i < callsHistory.value.length && trades.length < 15; i++) {
+                const row = callsHistory.value[i];
+                if (row?.type === 'group' && Array.isArray(row.value)) {
+                    for (const subRow of row.value) {
+                        if (trades.length >= 15) break;
+                        const trade = parseTradeRow(headers, subRow);
+                        if (trade) trades.push(trade);
+                    }
+                } else if (Array.isArray(row)) {
+                    const trade = parseTradeRow(headers, row);
+                    if (trade) trades.push(trade);
+                }
+            }
+        }
+
+        if (trades.length > 0) {
+            container.innerHTML = '<div class="trades-list">' + trades.map(t => {
+                const icon1 = getAssetIcon(t.fromAsset);
+                const icon2 = getAssetIcon(t.toAsset);
+                const symbol1 = t.fromSymbol || '?';
+                const symbol2 = t.toSymbol || '?';
+                const initials1 = symbol1.slice(0, 2).toUpperCase();
+                const initials2 = symbol2.slice(0, 2).toUpperCase();
+
+                // Determine buy/sell: buying = paying BEAM to get other token, selling = paying other token to get BEAM
+                const isBuy = t.fromAsset === BEAM_ASSET_ID && t.toAsset !== BEAM_ASSET_ID;
+                const isSell = t.fromAsset !== BEAM_ASSET_ID && t.toAsset === BEAM_ASSET_ID;
+                const tradeClass = isBuy ? 'buy' : (isSell ? 'sell' : '');
+
+                return `
+                <div class="trade-row ${tradeClass}">
+                    <span class="trade-block">#${t.height}</span>
+                    <span class="trade-type-badge trade">Trade</span>
+                    <div class="trade-flow">
+                        <div class="trade-token">
+                            <div class="trade-icon">${icon1 ? `<img src="${icon1}" onerror="this.parentElement.textContent='${initials1}'">` : initials1}</div>
+                            <span class="trade-token-amount">${t.fromAmount}</span>
+                            <span class="trade-token-symbol">$${symbol1}</span>
+                            <span class="trade-token-id">(${t.fromAsset})</span>
+                        </div>
+                        <span class="trade-arrow">→</span>
+                        <div class="trade-token">
+                            <div class="trade-icon">${icon2 ? `<img src="${icon2}" onerror="this.parentElement.textContent='${initials2}'">` : initials2}</div>
+                            <span class="trade-token-amount">${t.toAmount}</span>
+                            <span class="trade-token-symbol">$${symbol2}</span>
+                            <span class="trade-token-id">(${t.toAsset})</span>
+                        </div>
+                    </div>
+                    <span class="trade-fee" title="Pool Fee">${t.poolFee || '-'}</span>
+                    <span class="trade-fee" title="Vault Fee">${t.vaultFee || '-'}</span>
+                </div>`;
+            }).join('') + '</div>';
+        } else {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No recent DEX activity</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">Error: ' + e.message + '</div>';
+    }
+}
+
+function parseTradeRow(headers, row) {
+    if (!Array.isArray(row)) return null;
+    const obj = {};
+    headers.forEach((h, i) => {
+        const cell = row[i];
+        obj[h] = cell?.value !== undefined ? cell.value : cell;
+    });
+
+    const action = obj.Method || obj.Kind || 'Unknown';
+
+    // Only process Trade actions, skip AddLiquidity, Withdraw, etc.
+    const actionLower = action.toLowerCase();
+    if (actionLower !== 'trade' && !actionLower.includes('swap')) {
+        return null;
+    }
+
+    const fundsIdx = headers.findIndex(h => h === 'Funds');
+    const fundsCell = fundsIdx >= 0 ? row[fundsIdx] : row[row.length - 1];
+
+    let fromAsset = 0, toAsset = 0, fromSymbol = 'BEAM', toSymbol = '?';
+    let fromAmount = '0', toAmount = '0';
+    let poolFee = '-', vaultFee = '-';
+
+    if (fundsCell?.value && Array.isArray(fundsCell.value)) {
+        const funds = [];
+        for (const f of fundsCell.value) {
+            if (Array.isArray(f) && f.length >= 2) {
+                const aid = f[0]?.value ?? f[0];
+                const amt = f[1]?.value ?? f[1];
+                const asset = assets.get(aid) || { symbol: `A${aid}` };
+                funds.push({ aid, amt, symbol: asset.symbol });
+            }
+        }
+
+        if (funds.length >= 2) {
+            // Contract view: positive = deposited to contract (user paid), negative = withdrawn (user received)
+            const userPaid = funds.find(f => f.amt > 0) || funds[0];
+            const userReceived = funds.find(f => f.amt < 0) || funds[1];
+
+            // FROM = what user paid, TO = what user received
+            fromAsset = userPaid.aid;
+            fromSymbol = userPaid.symbol;
+            fromAmount = formatAmount(Math.abs(userPaid.amt || 0));
+
+            toAsset = userReceived.aid;
+            toSymbol = userReceived.symbol;
+            toAmount = formatAmount(Math.abs(userReceived.amt || 0));
+
+            // Pool fee ~0.3% of input
+            const poolFeeAmt = Math.abs(userPaid.amt || 0) * 0.003;
+            poolFee = formatAmount(poolFeeAmt);
+
+            // Vault fee ~0.1% of input
+            const vaultFeeAmt = Math.abs(userPaid.amt || 0) * 0.001;
+            vaultFee = formatAmount(vaultFeeAmt);
+        }
+    }
+
+    if (fromAmount === '0' && toAmount === '0') return null;
+
+    return {
+        height: obj.Height || '?',
+        action: 'Trade',
+        fromAsset, toAsset,
+        fromSymbol, toSymbol,
+        fromAmount, toAmount,
+        poolFee, vaultFee
+    };
+}
+
+// ==================== WALLET CONNECTION ====================
+function detectWalletType() {
+    log('info', '=== DETECTING WALLET TYPE ===');
+    log('info', 'typeof qt: ' + typeof qt);
+    log('info', 'window.BEAM: ' + (!!window.BEAM));
+    log('info', 'window.BeamApi: ' + (!!window.BeamApi));
+    log('info', 'navigator.userAgent: ' + navigator.userAgent);
+
+    if (typeof qt !== 'undefined') {
+        walletType = 'desktop';
+        log('info', 'Detected: DESKTOP WALLET (qt object found)');
+        initDesktopWallet();
+    } else if (window.BEAM) {
+        walletType = 'mobile';
+        log('info', 'Detected: MOBILE WALLET (window.BEAM exists)');
+        initMobileWallet();
+    } else {
+        walletType = 'extension';
+        log('info', 'Detected: BROWSER/EXTENSION (fallback)');
+        window.addEventListener('message', onExtensionMessage);
+        updateConnectionUI(false);
+        loadExplorerData();
+    }
+
+    log('info', 'Wallet type set to: ' + walletType);
+}
+
+function initDesktopWallet() {
+    const script = document.createElement('script');
+    script.src = 'qrc:///qtwebchannel/qwebchannel.js';
+
+    script.onload = () => {
+        try {
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                BEAM = channel.objects.BEAM;
+                if (!BEAM) {
+                    log('error', 'BEAM object not found');
+                    loadExplorerData();
+                    return;
+                }
+
+                if (BEAM.api) {
+                    if (BEAM.api.callWalletApiResult && typeof BEAM.api.callWalletApiResult.connect === 'function') {
+                        BEAM.api.callWalletApiResult.connect(handleApiResult);
+                    } else if (typeof BEAM.api.callWalletApiResult === 'function') {
+                        BEAM.api.callWalletApiResult(handleApiResult);
+                    } else {
+                        BEAM.api.callWalletApiResult = handleApiResult;
+                    }
+                    onConnected();
+                } else {
+                    loadExplorerData();
+                }
+            });
+        } catch (e) {
+            log('error', 'QWebChannel error', e.message);
+            loadExplorerData();
+        }
+    };
+
+    script.onerror = () => {
+        log('error', 'QWebChannel script failed');
+        loadExplorerData();
+    };
+
+    document.head.appendChild(script);
+}
+
+function initMobileWallet() {
+    BEAM = window.BEAM;
+
+    // === DEBUG: Log everything about window.BEAM ===
+    log('info', '=== MOBILE WALLET DEBUG ===');
+    log('info', 'window.BEAM exists: ' + (!!window.BEAM));
+    log('info', 'window.BEAM type: ' + typeof window.BEAM);
+
+    if (window.BEAM) {
+        // Log all properties and methods on BEAM object
+        const beamKeys = [];
+        for (let key in window.BEAM) {
+            beamKeys.push(key + ':' + typeof window.BEAM[key]);
+        }
+        log('info', 'BEAM properties: ' + (beamKeys.length ? beamKeys.join(', ') : '(none enumerable)'));
+
+        // Check specific methods
+        log('info', 'BEAM.callWalletApi: ' + typeof window.BEAM.callWalletApi);
+        log('info', 'BEAM.callWalletApiResult: ' + typeof window.BEAM.callWalletApiResult);
+        log('info', 'BEAM.api: ' + typeof window.BEAM.api);
+
+        if (window.BEAM.api) {
+            const apiKeys = [];
+            for (let key in window.BEAM.api) {
+                apiKeys.push(key + ':' + typeof window.BEAM.api[key]);
+            }
+            log('info', 'BEAM.api properties: ' + (apiKeys.length ? apiKeys.join(', ') : '(none enumerable)'));
+            log('info', 'BEAM.api.callWalletApi: ' + typeof window.BEAM.api.callWalletApi);
+            log('info', 'BEAM.api.callWalletApiResult: ' + typeof window.BEAM.api.callWalletApiResult);
+        }
+
+        // Try to get Object.keys and Object.getOwnPropertyNames
+        try {
+            log('info', 'Object.keys(BEAM): ' + JSON.stringify(Object.keys(window.BEAM)));
+        } catch(e) {
+            log('info', 'Object.keys(BEAM) failed: ' + e.message);
+        }
+        try {
+            log('info', 'getOwnPropertyNames(BEAM): ' + JSON.stringify(Object.getOwnPropertyNames(window.BEAM)));
+        } catch(e) {
+            log('info', 'getOwnPropertyNames(BEAM) failed: ' + e.message);
+        }
+    }
+
+    // Detect platform
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    log('info', 'Platform: ' + (isAndroid ? 'Android' : isIOS ? 'iOS' : 'Unknown'));
+    log('info', 'User Agent: ' + navigator.userAgent);
+    // === END DEBUG ===
+
+    if (BEAM) {
+        // Mobile wallet has callWalletApi directly on BEAM object, not under BEAM.api
+        // Create the api wrapper that callApi() expects
+        if (!BEAM.api) {
+            log('info', 'BEAM.api not found, creating wrapper...');
+            BEAM.api = {
+                callWalletApi: (jsonRequest) => {
+                    log('info', 'BEAM.api.callWalletApi called with: ' + (jsonRequest ? String(jsonRequest).substring(0, 200) : '(null)'));
+                    if (typeof BEAM.callWalletApi === 'function') {
+                        log('info', 'Forwarding to BEAM.callWalletApi...');
+                        try {
+                            BEAM.callWalletApi(jsonRequest);
+                            log('info', 'BEAM.callWalletApi called successfully');
+                        } catch(e) {
+                            log('error', 'BEAM.callWalletApi threw error: ' + e.message);
+                        }
+                    } else {
+                        log('error', 'BEAM.callWalletApi not available (type: ' + typeof BEAM.callWalletApi + ')');
+                    }
+                }
+            };
+            log('info', 'Created BEAM.api wrapper for mobile');
+        } else {
+            log('info', 'BEAM.api already exists, using it directly');
+            // Wrap existing callWalletApi to add logging
+            const originalCallWalletApi = BEAM.api.callWalletApi;
+            if (originalCallWalletApi) {
+                BEAM.api.callWalletApi = (jsonRequest) => {
+                    log('info', 'BEAM.api.callWalletApi (original) called with: ' + (jsonRequest ? String(jsonRequest).substring(0, 200) : '(null)'));
+                    try {
+                        originalCallWalletApi(jsonRequest);
+                        log('info', 'Original callWalletApi called successfully');
+                    } catch(e) {
+                        log('error', 'Original callWalletApi threw error: ' + e.message);
+                    }
+                };
+            }
+        }
+
+        // Set up result handlers
+        if (isAndroid) {
+            // Android fires custom document events
+            document.addEventListener('onCallWalletApiResult', (ev) => {
+                log('info', 'Android: Received onCallWalletApiResult event');
+                log('info', 'Event detail type: ' + typeof ev.detail);
+                try {
+                    log('info', 'Event detail: ' + (ev.detail == null ? '(null)' : JSON.stringify(ev.detail).substring(0, 500)));
+                } catch(e) {
+                    log('info', 'Event detail (stringify failed): ' + String(ev.detail));
+                }
+                handleApiResult(ev.detail);
+            });
+            log('info', 'Android: listening for onCallWalletApiResult events');
+        } else {
+            // iOS uses callback registration
+            if (typeof BEAM.callWalletApiResult === 'function') {
+                log('info', 'iOS: BEAM.callWalletApiResult is a function, registering callback');
+                BEAM.callWalletApiResult((result) => {
+                    log('info', 'iOS: Received callWalletApiResult callback');
+                    log('info', 'Result type: ' + typeof result);
+                    log('info', 'Result: ' + (result == null ? '(null)' : (typeof result === 'string' ? result.substring(0, 500) : JSON.stringify(result).substring(0, 500))));
+                    handleApiResult(result);
+                });
+                log('info', 'iOS: registered callWalletApiResult callback');
+            } else if (BEAM.api && typeof BEAM.api.callWalletApiResult === 'function') {
+                log('info', 'iOS: BEAM.api.callWalletApiResult is a function, registering callback');
+                BEAM.api.callWalletApiResult((result) => {
+                    log('info', 'iOS: Received BEAM.api.callWalletApiResult callback');
+                    log('info', 'Result: ' + (result == null ? '(null)' : (typeof result === 'string' ? result.substring(0, 500) : JSON.stringify(result).substring(0, 500))));
+                    handleApiResult(result);
+                });
+                log('info', 'iOS: registered BEAM.api.callWalletApiResult callback');
+            } else if (BEAM.api && BEAM.api.callWalletApiResult !== undefined) {
+                // Maybe it's a property we can assign to
+                log('info', 'iOS: Trying to assign handleApiResult to BEAM.api.callWalletApiResult');
+                BEAM.api.callWalletApiResult = handleApiResult;
+            } else {
+                log('warn', 'iOS: No callWalletApiResult method found!');
+                log('warn', 'iOS: Trying alternative approaches...');
+
+                // Try setting it on BEAM directly
+                if (BEAM.callWalletApiResult === undefined) {
+                    log('info', 'iOS: Setting BEAM.callWalletApiResult = handleApiResult');
+                    BEAM.callWalletApiResult = handleApiResult;
+                }
+            }
+        }
+
+        log('info', '=== MOBILE WALLET SETUP COMPLETE ===');
+        log('info', 'Final BEAM.api.callWalletApi: ' + typeof BEAM?.api?.callWalletApi);
+        onConnected();
+    } else {
+        log('error', 'window.BEAM is falsy, cannot initialize mobile wallet');
+        loadExplorerData();
+    }
+}
+
+function connectWallet() {
+    if (walletType === 'extension') {
+        const msg = { type: 'create_beam_api', apiver: 'current', apivermin: '', appname: 'BEAM DApps' };
+        try {
+            window.postMessage(msg, window.origin || '*');
+        } catch (e) {
+            window.postMessage(msg, '*');
+        }
+
+        document.getElementById('statusDot').className = 'status-dot connecting';
+        document.getElementById('connectBtn').disabled = true;
+        document.getElementById('connectBtn').textContent = 'Connecting...';
+
+        setTimeout(() => {
+            if (!isConnected) {
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('connectBtn').textContent = 'Connect';
+                document.getElementById('statusDot').className = 'status-dot';
+            }
+        }, 5000);
+    }
+}
+
+function onExtensionMessage(ev) {
+    if (!ev.data) return;
+
+    if (ev.data.type === 'apiInjected' && ev.data.result) {
+        BEAM = ev.data.result;
+        BEAM.api = {
+            callWalletApi: (jsonRequest) => {
+                try {
+                    window.postMessage(JSON.parse(jsonRequest), window.origin || '*');
+                } catch(e) {
+                    window.postMessage(JSON.parse(jsonRequest), '*');
+                }
+            }
+        };
+        onConnected();
+    } else if (ev.data.id !== undefined) {
+        handleApiResult(ev.data);
+    }
+}
+
+async function onConnected() {
+    log('info', '=== WALLET CONNECTED ===');
+    isConnected = true;
+    updateConnectionUI(true);
+    await loadShaders();
+    loadAllData();
+    loadBeamPrice();
+    startPolling();
+}
+
+function updateConnectionUI(connected) {
+    document.getElementById('statusDot').className = 'status-dot' + (connected ? ' connected' : '');
+    document.getElementById('footerStatusDot').className = 'status-dot' + (connected ? ' connected' : '');
+    document.getElementById('footerStatus').textContent = connected ? 'Connected' : 'Disconnected';
+
+    const btn = document.getElementById('connectBtn');
+    if (connected) {
+        btn.textContent = 'Connected';
+        btn.disabled = true;
+    } else {
+        btn.textContent = 'Connect';
+        btn.disabled = false;
+    }
+}
+
+// ==================== WALLET API ====================
+let apiCallbacks = new Map();
+let callId = 0;
+
+function callApi(method, params, callback) {
+    // Enhanced debug logging
+    log('info', `=== callApi(${method}) ===`);
+    log('info', 'BEAM exists: ' + (!!BEAM));
+    log('info', 'BEAM.api exists: ' + (!!BEAM?.api));
+    log('info', 'BEAM.api.callWalletApi exists: ' + (!!BEAM?.api?.callWalletApi));
+    log('info', 'BEAM.api.callWalletApi type: ' + typeof BEAM?.api?.callWalletApi);
+    log('info', 'isConnected flag: ' + isConnected);
+
+    if (!BEAM?.api?.callWalletApi) {
+        log('error', `Cannot call ${method}: Wallet not connected`);
+        log('error', 'Debug - BEAM: ' + (typeof BEAM) + ', BEAM.api: ' + (typeof BEAM?.api) + ', callWalletApi: ' + (typeof BEAM?.api?.callWalletApi));
+
+        // Try alternative: maybe callWalletApi is directly on BEAM
+        if (BEAM?.callWalletApi && typeof BEAM.callWalletApi === 'function') {
+            log('warn', 'Found BEAM.callWalletApi directly, creating wrapper now');
+            BEAM.api = BEAM.api || {};
+            BEAM.api.callWalletApi = BEAM.callWalletApi.bind(BEAM);
+            // Don't return, continue with the call
+        } else {
+            if (callback) callback({ error: { message: 'Wallet not connected' } });
+            return;
+        }
+    }
+
+    const id = ++callId;
+    const request = { jsonrpc: '2.0', id, method, params: params || {} };
+    const requestStr = JSON.stringify(request);
+    log('request', `Wallet [${id}] ${method}`, params);
+    log('info', `Request JSON (${requestStr ? requestStr.length : 0} chars): ${requestStr ? requestStr.substring(0, 300) : '(null)'}`);
+    apiCallbacks.set(id, { callback, method, time: Date.now() });
+
+    try {
+        log('info', 'Calling BEAM.api.callWalletApi...');
+        BEAM.api.callWalletApi(requestStr);
+        log('info', 'BEAM.api.callWalletApi returned (no error thrown)');
+    } catch (e) {
+        log('error', `API call failed with exception: ${e.message}`);
+        log('error', `Stack: ${e.stack}`);
+        apiCallbacks.delete(id);
+        if (callback) callback({ error: { message: e.message } });
+    }
+}
+
+function handleApiResult(json) {
+    log('info', '=== handleApiResult called ===');
+    log('info', 'Input type: ' + typeof json);
+    log('info', 'Input value: ' + (json == null ? '(null)' : (typeof json === 'string' ? json.substring(0, 500) : JSON.stringify(json).substring(0, 500))));
+
+    let data;
+    try {
+        data = typeof json === 'string' ? JSON.parse(json) : json;
+        log('info', 'Parsed data.id: ' + data.id);
+        log('info', 'Parsed data has error: ' + (!!data.error));
+        log('info', 'Parsed data has result: ' + (data.result !== undefined));
+    } catch (e) {
+        log('error', 'Failed to parse API result: ' + e.message);
+        log('error', 'Raw input was: ' + String(json).substring(0, 200));
+        return;
+    }
+
+    const info = apiCallbacks.get(data.id);
+    if (!info) {
+        log('warn', 'No callback found for id: ' + data.id);
+        log('warn', 'Current pending callbacks: ' + Array.from(apiCallbacks.keys()).join(', '));
+        return;
+    }
+
+    const elapsed = Date.now() - info.time;
+    apiCallbacks.delete(data.id);
+
+    if (data.error) {
+        log('error', `API [${data.id}] ${info.method} FAILED (${elapsed}ms)`, data.error);
+        if (info.callback) info.callback({ error: data.error });
+    } else {
+        const result = data.result !== undefined ? data.result : data;
+        log('response', `API [${data.id}] ${info.method} OK (${elapsed}ms)`, result);
+        if (info.callback) info.callback(result);
+    }
+}
+
+function invokeShader(cid, args, callback, createTx = false) {
+    const shader = cid === DEX_CID ? ammShader : minterShader;
+    if (!shader) {
+        log('error', `Shader not loaded for CID`);
+        if (callback) callback({ error: { message: 'Shader not loaded' } });
+        return;
+    }
+
+    const params = {
+        args: `cid=${cid},${args}`,
+        create_tx: createTx,
+        contract: shader
+    };
+
+    log('request', `invoke_contract: ${args.split(',')[0]}`);
+    callApi('invoke_contract', params, callback);
+}
+
+// ==================== SHADER LOADING ====================
+async function loadShaders() {
+    try {
+        ammShader = await loadShaderFile('shaders/amm_app.wasm');
+        log('response', `AMM shader: ${ammShader.length} bytes`);
+    } catch (e) {
+        log('error', 'AMM shader failed', e.message);
+    }
+
+    try {
+        minterShader = await loadShaderFile('shaders/minter_app.wasm');
+        log('response', `Minter shader: ${minterShader.length} bytes`);
+    } catch (e) {
+        log('error', 'Minter shader failed', e.message);
+    }
+}
+
+async function loadShaderFile(path) {
+    const resp = await fetch(path);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const buffer = await resp.arrayBuffer();
+    return Array.from(new Uint8Array(buffer));
+}
+
+// ==================== DATA LOADING ====================
+async function loadExplorerData() {
+    await loadExplorerStatus();
+    await loadExplorerAssets();
+    loadRecentTrades();
+    renderPoolsPlaceholder();
+}
+
+function loadAllData() {
+    loadExplorerStatus();
+    loadAssets();
+    loadPools();
+    loadRecentTrades();
+}
+
+function loadAssets() {
+    loadExplorerAssets();
+    callApi('assets_list', { refresh: true }, (res) => {
+        if (res?.error) return;
+        const list = res?.assets || [];
+        for (const a of list) {
+            const aid = a.asset_id;
+            let name = `Asset ${aid}`;
+            let symbol = `A${aid}`;
+
+            if (a.metadata_pairs) {
+                name = a.metadata_pairs.N || name;
+                symbol = a.metadata_pairs.SN || a.metadata_pairs.UN || symbol;
+            } else if (a.metadata) {
+                const pairs = parseMetadata(a.metadata);
+                name = pairs.N || name;
+                symbol = pairs.SN || pairs.UN || symbol;
+            }
+
+            assets.set(aid, { aid, name, symbol, decimals: 8, icon: ASSET_ICONS[aid] || null });
+        }
+    });
+}
+
+function loadPools() {
+    document.getElementById('poolsList').innerHTML = '<div class="loading-card"><span class="spinner"></span> Loading pools...</div>';
+
+    invokeShader(DEX_CID, 'action=pools_view', (res) => {
+        if (res?.error) {
+            renderPoolsPlaceholder();
+            return;
+        }
+
+        let output = res;
+        if (res?.output) {
+            try { output = JSON.parse(res.output); } catch(e) {}
+        }
+
+        const allPools = output?.res || output?.pools || [];
+
+        // Filter: only pools WITH liquidity
+        pools = allPools.filter(p => (p.tok1 > 0 && p.tok2 > 0));
+
+        // Sort by BEAM reserve (highest first)
+        pools.sort((a, b) => {
+            const aBeam = a.aid1 === BEAM_ASSET_ID ? a.tok1 : (a.aid2 === BEAM_ASSET_ID ? a.tok2 : 0);
+            const bBeam = b.aid1 === BEAM_ASSET_ID ? b.tok1 : (b.aid2 === BEAM_ASSET_ID ? b.tok2 : 0);
+            return bBeam - aBeam;
+        });
+
+        log('info', `${pools.length} pools sorted by BEAM reserve`);
+        document.getElementById('poolCount').textContent = pools.length;
+
+        // Ensure assets exist
+        pools.forEach(p => {
+            if (!assets.has(p.aid1)) assets.set(p.aid1, { aid: p.aid1, name: `Asset ${p.aid1}`, symbol: `A${p.aid1}`, decimals: 8, icon: null });
+            if (!assets.has(p.aid2)) assets.set(p.aid2, { aid: p.aid2, name: `Asset ${p.aid2}`, symbol: `A${p.aid2}`, decimals: 8, icon: null });
+        });
+
+        renderPools();
+        setDefaultTokens();
+    }, false);
+}
+
+function loadPoolsData() { loadPools(); }
+
+function loadBeamPrice() {
+    callApi('wallet_status', {}, (res) => {
+        if (res?.current_height) {
+            document.getElementById('blockHeight').textContent = res.current_height.toLocaleString();
+        }
+        // Try to get rate from wallet
+        if (res?.rate?.value) {
+            beamPriceUsd = res.rate.value;
+            document.getElementById('beamPriceDisplay').textContent = '$' + beamPriceUsd.toFixed(4);
+            log('info', `BEAM price: $${beamPriceUsd}`);
+        }
+    });
+}
+
+function renderPoolsPlaceholder() {
+    document.getElementById('poolsList').innerHTML = `
+        <div class="info-box warning">
+            <strong>Wallet Not Connected</strong><br>
+            Connect your BEAM wallet to load pool data and enable swapping.
+        </div>
+    `;
+}
+
+function startPolling() {
+    setInterval(() => {
+        if (isConnected) loadBeamPrice();
+        loadExplorerStatus();
+        loadRecentTrades();
+    }, 30000);
+}
+
+// ==================== RENDERING ====================
+function renderPools() {
+    const container = document.getElementById('poolsList');
+
+    if (pools.length === 0) {
+        container.innerHTML = '<div class="loading-card">No pools found</div>';
+        return;
+    }
+
+    container.innerHTML = pools.map(p => {
+        const a1 = assets.get(p.aid1) || { symbol: `A${p.aid1}`, name: `Asset ${p.aid1}`, icon: null };
+        const a2 = assets.get(p.aid2) || { symbol: `A${p.aid2}`, name: `Asset ${p.aid2}`, icon: null };
+
+        const reserve1 = formatAmount(p.tok1 || 0);
+        const reserve2 = formatAmount(p.tok2 || 0);
+        const feeLabel = p.kind === 1 ? '0.1%' : '0.3%';
+
+        // Calculate BEAM reserve in USD
+        const beamReserve = p.aid1 === BEAM_ASSET_ID ? p.tok1 : (p.aid2 === BEAM_ASSET_ID ? p.tok2 : 0);
+        const beamUsd = beamPriceUsd > 0 ? (beamReserve / 1e8) * beamPriceUsd : 0;
+        const usdDisplay = beamUsd > 0 ? `≈ $${formatUsd(beamUsd)}` : '';
+
+        let rate = '-';
+        if (p.tok1 && p.tok2 && p.tok1 > 0) {
+            rate = (p.tok2 / p.tok1).toFixed(4);
+        }
+
+        return `
+            <div class="card" onclick="selectPoolForSwap(${p.aid1}, ${p.aid2})">
+                <div class="pool-pair">
+                    <div class="pool-pair-icons">
+                        ${renderTokenIcon(a1)}
+                        ${renderTokenIcon(a2)}
+                    </div>
+                    <span class="pool-pair-name">${a1.symbol} / ${a2.symbol}</span>
+                    <span class="badge ${p.kind === 1 ? 'green' : 'yellow'}">${feeLabel}</span>
+                </div>
+                <div class="pool-stats">
+                    <div class="pool-stat">
+                        <div class="pool-stat-label">${a1.symbol} Reserve</div>
+                        <div class="pool-stat-value">${reserve1}</div>
+                        ${p.aid1 === BEAM_ASSET_ID && usdDisplay ? `<div class="pool-stat-usd">${usdDisplay}</div>` : ''}
+                    </div>
+                    <div class="pool-stat">
+                        <div class="pool-stat-label">${a2.symbol} Reserve</div>
+                        <div class="pool-stat-value">${reserve2}</div>
+                        ${p.aid2 === BEAM_ASSET_ID && usdDisplay ? `<div class="pool-stat-usd">${usdDisplay}</div>` : ''}
+                    </div>
+                    <div class="pool-stat full-width">
+                        <div class="pool-stat-label">Exchange Rate</div>
+                        <div class="pool-stat-value">1 ${a1.symbol} = ${rate} ${a2.symbol}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTokenIcon(asset, size = '') {
+    const initials = (asset.symbol || '??').slice(0, 2).toUpperCase();
+    const sizeClass = size ? ` token-icon-${size}` : '';
+
+    if (asset.icon) {
+        return `<div class="token-icon${sizeClass}"><img src="${asset.icon}" onerror="this.onerror=null; this.src='${NO_ICON_PATH}'; this.onerror=function(){this.parentElement.innerHTML='${initials}'}"></div>`;
+    }
+    return `<div class="token-icon${sizeClass}"><img src="${NO_ICON_PATH}" onerror="this.parentElement.innerHTML='${initials}'"></div>`;
+}
+
+function getAssetIcon(aid) {
+    const asset = assets.get(aid);
+    if (asset?.icon) return asset.icon;
+    if (ASSET_ICONS[aid]) return ASSET_ICONS[aid];
+    return null;
+}
+
+function formatAmount(val, decimals = 8) {
+    const n = val / Math.pow(10, decimals);
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+    return n.toFixed(2);
+}
+
+function formatUsd(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+    return n.toFixed(2);
+}
+
+// ==================== SWAP INTERFACE ====================
+function setDefaultTokens() {
+    if (fromAsset && toAsset) {
+        const amount = parseFloat(document.getElementById('fromAmount').value) || 0;
+        if (amount > 0 && isConnected) setTimeout(getQuote, 300);
+        return;
+    }
+
+    if (pools.length > 0) {
+        fromAsset = assets.get(pools[0].aid1);
+        toAsset = assets.get(pools[0].aid2);
+    } else {
+        fromAsset = assets.get(DEFAULT_FROM_ASSET);
+        toAsset = assets.get(DEFAULT_TO_ASSET);
+    }
+
+    if (fromAsset) updateTokenDisplay('from', fromAsset);
+    if (toAsset) updateTokenDisplay('to', toAsset);
+
+    document.getElementById('fromAmount').value = String(DEFAULT_AMOUNT);
+    updateSwapButton();
+}
+
+function updateTokenDisplay(which, asset) {
+    if (!asset) return;
+    const iconEl = document.getElementById(`${which}TokenIcon`);
+    const symbolEl = document.getElementById(`${which}TokenSymbol`);
+    const idEl = document.getElementById(`${which}TokenId`);
+
+    symbolEl.textContent = asset.symbol;
+    idEl.textContent = `ID: ${asset.aid}`;
+
+    const initials = (asset.symbol || '??').slice(0, 2);
+    if (asset.icon) {
+        iconEl.innerHTML = `<img src="${asset.icon}" onerror="this.parentElement.textContent='${initials}'">`;
+    } else {
+        iconEl.textContent = initials;
+    }
+}
+
+function renderTokenList(filter = '') {
+    const container = document.getElementById('tokenList');
+    const filterLower = (filter || '').toLowerCase();
+
+    const priorityItems = [];
+    const otherItems = [];
+
+    for (const [aid, asset] of assets) {
+        if (filterLower &&
+            !asset.symbol.toLowerCase().includes(filterLower) &&
+            !asset.name.toLowerCase().includes(filterLower) &&
+            !String(aid).includes(filterLower)) {
+            continue;
+        }
+
+        const priorityIndex = PRIORITY_TOKENS.findIndex(t => t.aid === aid);
+        if (priorityIndex >= 0) {
+            priorityItems[priorityIndex] = asset;
+        } else {
+            otherItems.push(asset);
+        }
+    }
+
+    otherItems.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    const items = [...priorityItems.filter(Boolean), ...otherItems];
+
+    container.innerHTML = items.length === 0
+        ? '<div style="padding: 20px; text-align: center; color: var(--text-muted);">No tokens found</div>'
+        : items.map(a => {
+            const initials = (a.symbol || '??').slice(0,2).toUpperCase();
+            const iconSrc = a.icon || NO_ICON_PATH;
+            return `
+            <div class="token-item" onclick="selectToken(${a.aid})">
+                <div class="token-icon"><img src="${iconSrc}" onerror="this.onerror=null; this.src='${NO_ICON_PATH}'; this.onerror=function(){this.parentElement.innerHTML='${initials}'}"></div>
+                <div class="token-item-info">
+                    <div class="token-item-name">${a.symbol}</div>
+                    <div class="token-item-meta">${a.name} (ID: ${a.aid})</div>
+                </div>
+            </div>
+        `}).join('');
+}
+
+function filterTokens() {
+    renderTokenList(document.getElementById('tokenSearch').value);
+}
+
+function selectToken(aid) {
+    const asset = assets.get(aid);
+    if (!asset) return;
+
+    if (tokenModalTarget === 'from') {
+        if (toAsset?.aid === aid) { toAsset = fromAsset; updateTokenDisplay('to', toAsset); }
+        fromAsset = asset;
+        updateTokenDisplay('from', asset);
+    } else {
+        if (fromAsset?.aid === aid) { fromAsset = toAsset; updateTokenDisplay('from', fromAsset); }
+        toAsset = asset;
+        updateTokenDisplay('to', asset);
+    }
+
+    closeTokenModal();
+    currentQuote = null;
+    document.getElementById('toAmount').value = '';
+    document.getElementById('swapInfo').style.display = 'none';
+    updateSwapButton();
+
+    if (fromAsset && toAsset && parseFloat(document.getElementById('fromAmount').value) > 0) {
+        setTimeout(getQuote, 300);
+    }
+}
+
+function swapTokens() {
+    [fromAsset, toAsset] = [toAsset, fromAsset];
+    if (fromAsset) updateTokenDisplay('from', fromAsset);
+    if (toAsset) updateTokenDisplay('to', toAsset);
+
+    const toVal = document.getElementById('toAmount').value;
+    document.getElementById('fromAmount').value = toVal || '';
+    document.getElementById('toAmount').value = '';
+    currentQuote = null;
+    document.getElementById('swapInfo').style.display = 'none';
+    updateSwapButton();
+
+    if (fromAsset && toAsset && parseFloat(document.getElementById('fromAmount').value) > 0) {
+        setTimeout(getQuote, 300);
+    }
+}
+
+function onAmountChange() {
+    currentQuote = null;
+    document.getElementById('toAmount').value = '';
+    document.getElementById('swapInfo').style.display = 'none';
+    updateSwapButton();
+
+    if (quoteTimeout) clearTimeout(quoteTimeout);
+    const amount = parseFloat(document.getElementById('fromAmount').value) || 0;
+    if (amount > 0 && fromAsset && toAsset) {
+        document.getElementById('toAmount').value = '...';
+        quoteTimeout = setTimeout(getQuote, 500);
+    }
+}
+
+function updateSwapButton() {
+    const btn = document.getElementById('swapBtn');
+    const amount = parseFloat(document.getElementById('fromAmount').value) || 0;
+
+    if (!fromAsset || !toAsset) {
+        btn.disabled = true;
+        btn.textContent = 'Select tokens to swap';
+    } else if (!isConnected) {
+        btn.disabled = true;
+        btn.textContent = 'Connect wallet to swap';
+    } else if (amount <= 0) {
+        btn.disabled = true;
+        btn.textContent = 'Enter an amount';
+    } else if (document.getElementById('toAmount').value === '...') {
+        btn.disabled = true;
+        btn.textContent = 'Getting quote...';
+    } else if (!currentQuote) {
+        btn.disabled = true;
+        btn.textContent = 'Enter an amount';
+    } else {
+        btn.disabled = false;
+        btn.textContent = 'Swap Now';
+    }
+}
+
+function findPool(aid1, aid2) {
+    return pools.find(p => (p.aid1 === aid1 && p.aid2 === aid2) || (p.aid1 === aid2 && p.aid2 === aid1));
+}
+
+function getQuote() {
+    if (!fromAsset || !toAsset || !isConnected) return;
+
+    const amount = parseFloat(document.getElementById('fromAmount').value) || 0;
+    if (amount <= 0) return;
+
+    let pool = findPool(fromAsset.aid, toAsset.aid);
+
+    // AUTO-SWITCH TO BEAM if no pool found
+    if (!pool && fromAsset.aid !== BEAM_ASSET_ID && toAsset.aid !== BEAM_ASSET_ID) {
+        log('info', `No pool for ${fromAsset.symbol}/${toAsset.symbol}, switching to BEAM`);
+        showNotification(`No direct pool. Switched to BEAM`, 'info');
+
+        // Change FROM to BEAM
+        fromAsset = assets.get(BEAM_ASSET_ID);
+        updateTokenDisplay('from', fromAsset);
+        pool = findPool(fromAsset.aid, toAsset.aid);
+    }
+
+    if (!pool) {
+        log('error', 'No pool found for pair', { from: fromAsset.aid, to: toAsset.aid });
+        document.getElementById('toAmount').value = '';
+        showNotification(`No liquidity pool for ${fromAsset.symbol}/${toAsset.symbol}`, 'error');
+        updateSwapButton();
+        return;
+    }
+
+    const amountSmall = Math.floor(amount * Math.pow(10, 8));
+
+    let callAid1, callAid2;
+    if (fromAsset.aid === pool.aid2) {
+        callAid1 = pool.aid1;
+        callAid2 = pool.aid2;
+    } else {
+        callAid1 = pool.aid2;
+        callAid2 = pool.aid1;
+    }
+
+    const args = `action=pool_trade,aid1=${callAid1},aid2=${callAid2},kind=${pool.kind},val1_buy=0,val2_pay=${amountSmall},bPredictOnly=1`;
+
+    invokeShader(DEX_CID, args, (res) => {
+        if (res?.error) {
+            document.getElementById('toAmount').value = '';
+            updateSwapButton();
+            return;
+        }
+
+        let output = res;
+        if (res?.output) {
+            try { output = JSON.parse(res.output); } catch(e) {}
+        }
+
+        const r = output?.res || output;
+        const buyAmount = r?.buy || 0;
+        const payAmount = r?.pay || amountSmall;
+        const fee = r?.fee_pool || 0;
+
+        const buyFormatted = buyAmount / 1e8;
+        const payFormatted = payAmount / 1e8;
+        const feeFormatted = fee / 1e8;
+
+        document.getElementById('toAmount').value = buyFormatted.toFixed(6);
+        document.getElementById('swapRate').textContent = buyAmount > 0 ? `1 ${toAsset.symbol} = ${(payFormatted / buyFormatted).toFixed(6)} ${fromAsset.symbol}` : '-';
+        document.getElementById('swapPay').textContent = `${payFormatted.toFixed(6)} ${fromAsset.symbol}`;
+        document.getElementById('swapReceive').textContent = `${buyFormatted.toFixed(6)} ${toAsset.symbol}`;
+        document.getElementById('swapFee').textContent = `${feeFormatted.toFixed(6)} ${toAsset.symbol}`;
+        document.getElementById('swapInfo').style.display = 'block';
+
+        currentQuote = { pool, amountSmall: payAmount, callAid1, callAid2 };
+        updateSwapButton();
+    }, false);
+}
+
+function handleSwap() {
+    if (!currentQuote || !isConnected) return;
+
+    const btn = document.getElementById('swapBtn');
+    btn.disabled = true;
+    btn.textContent = 'Swapping...';
+
+    const { pool, amountSmall, callAid1, callAid2 } = currentQuote;
+    const args = `action=pool_trade,aid1=${callAid1},aid2=${callAid2},kind=${pool.kind},val1_buy=0,val2_pay=${amountSmall},bPredictOnly=0`;
+
+    invokeShader(DEX_CID, args, (res) => {
+        if (res?.error) {
+            showNotification('Swap failed: ' + (res.error.message || 'Unknown error'), 'error');
+            updateSwapButton();
+            return;
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Swap failed: No transaction data', 'error');
+            updateSwapButton();
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('Transaction failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Swap submitted! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                document.getElementById('fromAmount').value = '';
+                document.getElementById('toAmount').value = '';
+                document.getElementById('swapInfo').style.display = 'none';
+                currentQuote = null;
+            }
+            updateSwapButton();
+        });
+    }, false);
+}
+
+function selectPoolForSwap(aid1, aid2) {
+    fromAsset = assets.get(aid1);
+    toAsset = assets.get(aid2);
+    if (fromAsset) updateTokenDisplay('from', fromAsset);
+    if (toAsset) updateTokenDisplay('to', toAsset);
+    document.getElementById('fromAmount').value = '10';
+    document.getElementById('toAmount').value = '';
+    currentQuote = null;
+    showPage('swap');
+    setTimeout(getQuote, 300);
+}
+
+// ==================== TOKEN MINTER ====================
+function showMinterTab(tab) {
+    document.querySelectorAll('.minter-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.minter-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.minter-tab[onclick*="${tab}"]`).classList.add('active');
+    document.getElementById('minter-' + tab).classList.add('active');
+
+    if (tab === 'owned') loadOwnedTokens();
+}
+
+function createToken() {
+    if (!isConnected) {
+        showNotification('Please connect your wallet first', 'error');
+        return;
+    }
+
+    const name = document.getElementById('tokenName').value.trim();
+    const shortName = document.getElementById('tokenShortName').value.trim().toUpperCase();
+    const unit = document.getElementById('tokenUnit').value.trim();
+    const smallUnit = document.getElementById('tokenSmallUnit').value.trim();
+    const supply = document.getElementById('tokenSupply').value.trim();
+    const decimals = parseInt(document.getElementById('tokenDecimals').value) || 8;
+    const logo = document.getElementById('tokenLogo').value.trim();
+    const shortDesc = document.getElementById('tokenShortDesc').value.trim();
+    const longDesc = document.getElementById('tokenLongDesc').value.trim();
+    const color = document.getElementById('tokenColor').value.trim();
+
+    if (!name || !shortName || !unit || !smallUnit || !supply) {
+        showNotification('Please fill in all required fields', 'error');
+        return;
+    }
+
+    if (shortName.length > 6) {
+        showNotification('Ticker symbol must be 6 characters or less', 'error');
+        return;
+    }
+
+    const supplyNum = parseInt(supply);
+    if (isNaN(supplyNum) || supplyNum <= 0) {
+        showNotification('Please enter a valid supply number', 'error');
+        return;
+    }
+
+    const ratio = Math.pow(10, decimals);
+    let metadata = `STD:SCH_VER=1;N=${name};SN=${shortName};UN=${unit};NTHUN=${smallUnit};NTH_RATIO=${ratio}`;
+    if (logo) metadata += `;OPT_LOGO_URL=${logo}`;
+    if (shortDesc) metadata += `;OPT_SHORT_DESC=${shortDesc}`;
+    if (longDesc) metadata += `;OPT_LONG_DESC=${longDesc}`;
+    if (color?.match(/^#[0-9A-Fa-f]{6}$/)) metadata += `;OPT_COLOR=${color}`;
+
+    const limit = BigInt(supplyNum) * BigInt(ratio);
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.textContent = 'Creating token...';
+
+    invokeShader(MINTER_CID, `action=create_token,metadata=${metadata},limit=${limit}`, (res) => {
+        if (res?.error) {
+            showNotification('Creation failed: ' + (res.error.message || 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.textContent = 'Create Token';
+            return;
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Creation failed: No transaction data', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Create Token';
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('Transaction failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Token created! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                ['tokenName', 'tokenShortName', 'tokenUnit', 'tokenSmallUnit', 'tokenSupply', 'tokenLogo', 'tokenShortDesc', 'tokenLongDesc'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+            }
+            btn.disabled = false;
+            btn.textContent = 'Create Token';
+        });
+    }, false);
+}
+
+function loadOwnedTokens() {
+    const container = document.getElementById('ownedTokensList');
+    container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);"><span class="spinner"></span> Loading...</div>';
+
+    if (!isConnected) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Connect wallet to view your tokens</div>';
+        return;
+    }
+
+    invokeShader(MINTER_CID, 'action=view_owned', (res) => {
+        if (res?.error) {
+            container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Error loading tokens</div>';
+            return;
+        }
+
+        let output = res;
+        if (res?.output) {
+            try { output = JSON.parse(res.output); } catch(e) {}
+        }
+
+        const ownedAssets = output?.assets || [];
+
+        if (ownedAssets.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">No tokens owned yet. Create your first token!</div>';
+            return;
+        }
+
+        container.innerHTML = ownedAssets.map(a => {
+            const asset = assets.get(a.aid) || { symbol: `A${a.aid}`, name: `Asset ${a.aid}`, icon: null };
+            const initials = (asset.symbol || '??').slice(0, 2).toUpperCase();
+            return `
+                <div class="owned-asset-item">
+                    <div class="token-icon">
+                        ${asset.icon ? `<img src="${asset.icon}" onerror="this.parentElement.innerHTML='${initials}'">` : initials}
+                    </div>
+                    <div class="owned-asset-info">
+                        <div class="owned-asset-name">${asset.symbol}</div>
+                        <div class="owned-asset-meta">ID: ${a.aid} | Supply: ${formatAmount(a.supply || 0)}</div>
+                    </div>
+                    <div class="owned-asset-actions">
+                        <button class="btn-small" onclick="viewTokenDetails(${a.aid})">Details</button>
+                        <button class="btn-small primary" onclick="prepareMint(${a.aid})">Mint</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }, false);
+}
+
+function viewTokenDetails(aid) {
+    const asset = assets.get(aid);
+    showNotification(`${asset?.symbol || `Asset ${aid}`} - ID: ${aid}`, 'info');
+}
+
+function prepareMint(aid) {
+    showMinterTab('mint');
+    document.getElementById('mintAssetId').value = aid;
+}
+
+function mintTokens() {
+    if (!isConnected) {
+        showNotification('Please connect your wallet first', 'error');
+        return;
+    }
+
+    const aid = parseInt(document.getElementById('mintAssetId').value);
+    const amount = parseFloat(document.getElementById('mintAmount').value);
+
+    if (!aid || aid <= 0) {
+        showNotification('Please enter a valid Asset ID', 'error');
+        return;
+    }
+
+    if (!amount || amount <= 0) {
+        showNotification('Please enter a valid amount', 'error');
+        return;
+    }
+
+    const amountSmall = Math.floor(amount * 1e8);
+
+    const btn = document.getElementById('mintBtn');
+    btn.disabled = true;
+    btn.textContent = 'Minting...';
+
+    invokeShader(MINTER_CID, `action=withdraw,aid=${aid},amount=${amountSmall}`, (res) => {
+        if (res?.error) {
+            showNotification('Mint failed: ' + (res.error.message || 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.textContent = 'Mint Tokens';
+            return;
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Mint failed: No transaction data', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Mint Tokens';
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('Transaction failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Tokens minted! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                document.getElementById('mintAmount').value = '';
+            }
+            btn.disabled = false;
+            btn.textContent = 'Mint Tokens';
+        });
+    }, false);
+}
+
+// ==================== NAVIGATION ====================
+function showPage(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+}
+
+// ==================== NODE SELECTOR ====================
+function changeNode() {
+    const select = document.getElementById('nodeSelect');
+    const value = select.value;
+
+    if (value === 'custom') {
+        const customUrl = prompt('Enter custom Explorer API URL:', 'https://');
+        if (customUrl && customUrl.startsWith('http')) {
+            EXPLORER_API = customUrl.replace(/\/$/, '');
+            testExplorerConnection();
+        } else {
+            select.value = EXPLORER_API;
+        }
+    } else {
+        EXPLORER_API = value;
+        testExplorerConnection();
+    }
+}
+
+async function testExplorerConnection(silent = false) {
+    const statusDot = document.getElementById('nodeStatusDot');
+    if (statusDot) statusDot.className = 'status-dot connecting';
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const resp = await fetch(`${EXPLORER_API}/status`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (resp.ok) {
+            updateNodeStatus(true);
+            if (!silent) showNotification('Connected to Explorer', 'success');
+            loadExplorerStatus();
+            loadExplorerAssets();
+            return true;
+        } else {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+    } catch (e) {
+        updateNodeStatus(false);
+        if (!silent) showNotification('Explorer connection failed', 'error');
+        return false;
+    }
+}
+
+// ==================== NOTIFICATIONS ====================
+function showNotification(message, type = 'info') {
+    const existing = document.querySelector('.notification-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `notification-toast ${type}`;
+    toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()">&times;</button>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', () => {
+    log('info', '========================================');
+    log('info', 'BEAM All-in-One v3.0');
+    log('info', 'Build: 2026-01-23');
+    log('info', '========================================');
+
+    PRIORITY_TOKENS.forEach(token => {
+        assets.set(token.aid, {
+            aid: token.aid,
+            name: token.name,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            icon: ASSET_ICONS[token.aid] || null
+        });
+    });
+
+    initializeDefaultSwap();
+    testExplorerConnection(true);
+    detectWalletType();
+});
+
+function initializeDefaultSwap() {
+    fromAsset = assets.get(DEFAULT_FROM_ASSET);
+    toAsset = assets.get(DEFAULT_TO_ASSET);
+
+    if (fromAsset) updateTokenDisplay('from', fromAsset);
+    if (toAsset) updateTokenDisplay('to', toAsset);
+
+    document.getElementById('fromAmount').value = DEFAULT_AMOUNT;
+    updateSwapButton();
+}
+
+function openTokenModal(target) {
+    tokenModalTarget = target;
+    document.getElementById('tokenSearch').value = '';
+    renderTokenList();
+    document.getElementById('tokenModal').classList.add('active');
+}
+
+function closeTokenModal() {
+    document.getElementById('tokenModal').classList.remove('active');
+    tokenModalTarget = null;
+}
+
+// ==================== LIQUIDITY MANAGEMENT ====================
+let currentLiqPool = null;
+let liqAmountTimeout = null;
+let liqRateInverted = false;
+let liqRateData = { rate1: '', rate2: '' };
+
+function openLiquidityModal() {
+    if (!fromAsset || !toAsset) {
+        showNotification('Select tokens first', 'error');
+        return;
+    }
+
+    const pool = findPool(fromAsset.aid, toAsset.aid);
+    if (!pool) {
+        // No pool exists - show Create Pool modal
+        openCreatePoolModal(fromAsset, toAsset);
+        return;
+    }
+
+    currentLiqPool = pool;
+    liqRateInverted = false;
+
+    const a1 = assets.get(pool.aid1) || { symbol: `A${pool.aid1}`, icon: null };
+    const a2 = assets.get(pool.aid2) || { symbol: `A${pool.aid2}`, icon: null };
+
+    // Update modal title
+    document.getElementById('liquidityModalTitle').textContent = `${a1.symbol} / ${a2.symbol} Liquidity`;
+
+    // Pool info
+    document.getElementById('liqPoolPair').textContent = `${a1.symbol} / ${a2.symbol}`;
+    document.getElementById('liqReserve1').textContent = `${formatAmount(pool.tok1)} ${a1.symbol}`;
+    document.getElementById('liqReserve2').textContent = `${formatAmount(pool.tok2)} ${a2.symbol}`;
+
+    // Store both rate directions for toggle
+    const rate1to2 = pool.tok1 > 0 ? (pool.tok2 / pool.tok1).toFixed(6) : '-';
+    const rate2to1 = pool.tok2 > 0 ? (pool.tok1 / pool.tok2).toFixed(6) : '-';
+    liqRateData.rate1 = `1 ${a1.symbol} = ${rate1to2} ${a2.symbol}`;
+    liqRateData.rate2 = `1 ${a2.symbol} = ${rate2to1} ${a1.symbol}`;
+    document.getElementById('liqRate').textContent = liqRateData.rate1;
+    document.getElementById('liqLpToken').textContent = pool['lp-token'] || '-';
+
+    // Token displays for Add Liquidity
+    updateLiqTokenDisplay(1, a1);
+    updateLiqTokenDisplay(2, a2);
+    document.getElementById('liqSymbol1').textContent = a1.symbol;
+    document.getElementById('liqSymbol2').textContent = a2.symbol;
+
+    // LP token symbol for Remove
+    document.getElementById('liqRemoveLpSymbol').textContent = `LP-${a1.symbol}/${a2.symbol}`;
+
+    // Clear inputs
+    document.getElementById('liqAmount1').value = '';
+    document.getElementById('liqAmount2').value = '';
+    document.getElementById('liqRemoveAmount').value = '';
+    document.getElementById('liqEstimatedLp').textContent = '-';
+    document.getElementById('liqRemoveReceive').textContent = '-';
+
+    // Update balances if connected
+    if (isConnected) {
+        loadLiquidityBalances(pool);
+    } else {
+        document.getElementById('liqBalance1').textContent = 'Balance: -';
+        document.getElementById('liqBalance2').textContent = 'Balance: -';
+        document.getElementById('liqLpBalance').textContent = 'Your LP: -';
+    }
+
+    // Reset to Add tab
+    showLiquidityTab('add');
+
+    // Show modal
+    document.getElementById('liquidityModal').classList.add('active');
+}
+
+function closeLiquidityModal() {
+    document.getElementById('liquidityModal').classList.remove('active');
+    currentLiqPool = null;
+}
+
+function toggleLiquidityRate() {
+    liqRateInverted = !liqRateInverted;
+    document.getElementById('liqRate').textContent = liqRateInverted ? liqRateData.rate2 : liqRateData.rate1;
+}
+
+function showLiquidityTab(tab) {
+    document.querySelectorAll('.liquidity-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.liquidity-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.liquidity-tab[onclick*="${tab}"]`)?.classList.add('active');
+    document.getElementById('liq-' + tab)?.classList.add('active');
+}
+
+function updateLiqTokenDisplay(which, asset) {
+    const iconEl = document.getElementById(`liqIcon${which}`);
+    const initials = (asset.symbol || '??').slice(0, 2);
+    if (asset.icon) {
+        iconEl.innerHTML = `<img src="${asset.icon}" onerror="this.parentElement.textContent='${initials}'">`;
+    } else {
+        iconEl.textContent = initials;
+    }
+}
+
+function loadLiquidityBalances(pool) {
+    // Get wallet balances for pool assets
+    callApi('wallet_status', {}, (res) => {
+        if (res?.totals) {
+            const a1Balance = res.totals.find(t => t.asset_id === pool.aid1);
+            const a2Balance = res.totals.find(t => t.asset_id === pool.aid2);
+            const lpBalance = res.totals.find(t => t.asset_id === pool['lp-token']);
+
+            const a1 = assets.get(pool.aid1) || { symbol: 'A' + pool.aid1 };
+            const a2 = assets.get(pool.aid2) || { symbol: 'A' + pool.aid2 };
+
+            document.getElementById('liqBalance1').textContent = `Balance: ${a1Balance ? formatAmount(a1Balance.available) : '0'} ${a1.symbol}`;
+            document.getElementById('liqBalance2').textContent = `Balance: ${a2Balance ? formatAmount(a2Balance.available) : '0'} ${a2.symbol}`;
+            document.getElementById('liqLpBalance').textContent = `Your LP: ${lpBalance ? formatAmount(lpBalance.available) : '0'}`;
+        }
+    });
+}
+
+function onLiquidityAmountChange(which) {
+    if (!currentLiqPool) {
+        log('warn', 'onLiquidityAmountChange: no currentLiqPool');
+        return;
+    }
+
+    const pool = currentLiqPool;
+    const input1 = document.getElementById('liqAmount1');
+    const input2 = document.getElementById('liqAmount2');
+    const btn = document.getElementById('addLiquidityBtn');
+
+    const amount = parseFloat(which === 1 ? input1.value : input2.value) || 0;
+
+    if (amount <= 0) {
+        btn.disabled = true;
+        btn.textContent = 'Enter amounts';
+        document.getElementById('liqEstimatedLp').textContent = '-';
+        return;
+    }
+
+    // Calculate proportional amounts based on pool reserves
+    if (which === 1 && pool.tok1 > 0) {
+        const ratio = pool.tok2 / pool.tok1;
+        const amount2 = amount * ratio;
+        input2.value = amount2.toFixed(6);
+    } else if (which === 2 && pool.tok2 > 0) {
+        const ratio = pool.tok1 / pool.tok2;
+        const amount1 = amount * ratio;
+        input1.value = amount1.toFixed(6);
+    }
+
+    // Get final amounts
+    const amt1 = parseFloat(input1.value) || 0;
+    const amt2 = parseFloat(input2.value) || 0;
+
+    // Estimate LP tokens: LP = min(amt1_groth/tok1, amt2_groth/tok2) * total_ctl
+    if (amt1 > 0 && amt2 > 0 && pool.ctl > 0) {
+        const amt1Groth = amt1 * 1e8;
+        const amt2Groth = amt2 * 1e8;
+        const share1 = amt1Groth / pool.tok1;
+        const share2 = amt2Groth / pool.tok2;
+        const lpEstimateGroth = Math.min(share1, share2) * pool.ctl;
+        // formatAmount expects groth, so pass lpEstimateGroth directly
+        document.getElementById('liqEstimatedLp').textContent = formatAmount(lpEstimateGroth);
+        log('info', `LP estimate: share1=${share1.toFixed(6)}, share2=${share2.toFixed(6)}, ctl=${pool.ctl}, est=${lpEstimateGroth}`);
+    } else {
+        document.getElementById('liqEstimatedLp').textContent = '-';
+    }
+
+    // Update button
+    if (amt1 > 0 && amt2 > 0) {
+        if (isConnected) {
+            btn.disabled = false;
+            btn.textContent = 'Add Liquidity';
+        } else {
+            btn.disabled = true;
+            btn.textContent = 'Connect wallet';
+        }
+    } else {
+        btn.disabled = true;
+        btn.textContent = 'Enter amounts';
+    }
+}
+
+function onRemoveAmountChange() {
+    if (!currentLiqPool) return;
+
+    const pool = currentLiqPool;
+    const input = document.getElementById('liqRemoveAmount');
+    const btn = document.getElementById('removeLiquidityBtn');
+    const amount = parseFloat(input.value) || 0;
+
+    if (amount <= 0 || pool.ctl <= 0) {
+        btn.disabled = true;
+        btn.textContent = 'Enter amount';
+        document.getElementById('liqRemoveReceive').textContent = '-';
+        return;
+    }
+
+    // Calculate receive amounts based on LP share
+    const amountSmall = amount * 1e8;
+    const share = amountSmall / pool.ctl;
+    const receive1 = (share * pool.tok1) / 1e8;
+    const receive2 = (share * pool.tok2) / 1e8;
+
+    const a1 = assets.get(pool.aid1) || { symbol: 'A' + pool.aid1 };
+    const a2 = assets.get(pool.aid2) || { symbol: 'A' + pool.aid2 };
+
+    document.getElementById('liqRemoveReceive').textContent = `${receive1.toFixed(4)} ${a1.symbol} + ${receive2.toFixed(4)} ${a2.symbol}`;
+
+    if (isConnected) {
+        btn.disabled = false;
+        btn.textContent = 'Remove Liquidity';
+    } else {
+        btn.disabled = true;
+        btn.textContent = 'Connect wallet';
+    }
+}
+
+function addLiquidity() {
+    log('info', 'addLiquidity called', { pool: !!currentLiqPool, connected: isConnected });
+
+    if (!currentLiqPool) {
+        showNotification('No pool selected', 'error');
+        return;
+    }
+    if (!isConnected) {
+        showNotification('Connect wallet first', 'error');
+        return;
+    }
+
+    const pool = currentLiqPool;
+    const amt1 = parseFloat(document.getElementById('liqAmount1').value) || 0;
+    const amt2 = parseFloat(document.getElementById('liqAmount2').value) || 0;
+
+    log('info', 'addLiquidity amounts', { amt1, amt2 });
+
+    if (amt1 <= 0 || amt2 <= 0) {
+        showNotification('Enter valid amounts', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('addLiquidityBtn');
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    const amount1 = Math.floor(amt1 * 1e8);
+    const amount2 = Math.floor(amt2 * 1e8);
+
+    // Try with bCoversAll to indicate amounts cover both sides
+    const args = `action=pool_add_liquidity,aid1=${pool.aid1},aid2=${pool.aid2},kind=${pool.kind},val1=${amount1},bCoversAll=1`;
+    log('info', 'addLiquidity invoking shader', args);
+
+    invokeShader(DEX_CID, args, (res) => {
+        if (res?.error) {
+            showNotification('Failed: ' + (res.error.message || 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.textContent = 'Add Liquidity';
+            return;
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Failed: No transaction data', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Add Liquidity';
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('TX failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Liquidity added! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                closeLiquidityModal();
+                setTimeout(loadPools, 2000);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Add Liquidity';
+        });
+    }, false);
+}
+
+function removeLiquidity() {
+    if (!currentLiqPool || !isConnected) return;
+
+    const pool = currentLiqPool;
+    const amt = parseFloat(document.getElementById('liqRemoveAmount').value) || 0;
+
+    if (amt <= 0) {
+        showNotification('Enter valid amount', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('removeLiquidityBtn');
+    btn.disabled = true;
+    btn.textContent = 'Removing...';
+
+    const ctlAmount = Math.floor(amt * 1e8);
+
+    const args = `action=pool_withdraw,aid1=${pool.aid1},aid2=${pool.aid2},kind=${pool.kind},ctl=${ctlAmount}`;
+
+    invokeShader(DEX_CID, args, (res) => {
+        if (res?.error) {
+            showNotification('Failed: ' + (res.error.message || 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.textContent = 'Remove Liquidity';
+            return;
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Failed: No transaction data', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Remove Liquidity';
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('TX failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Liquidity removed! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                closeLiquidityModal();
+                setTimeout(loadPools, 2000);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Remove Liquidity';
+        });
+    }, false);
+}
+
+// ==================== CREATE POOL ====================
+let createPoolAsset1 = null;
+let createPoolAsset2 = null;
+let createPoolKind = 2; // Default: Standard (0.3%)
+
+function openCreatePoolModal(asset1, asset2) {
+    createPoolAsset1 = asset1;
+    createPoolAsset2 = asset2;
+    createPoolKind = 2;
+
+    // Update pair display
+    const initials1 = (asset1.symbol || '??').slice(0, 2);
+    const initials2 = (asset2.symbol || '??').slice(0, 2);
+
+    const icon1El = document.getElementById('createPoolIcon1');
+    const icon2El = document.getElementById('createPoolIcon2');
+
+    if (asset1.icon) {
+        icon1El.innerHTML = `<img src="${asset1.icon}" onerror="this.parentElement.textContent='${initials1}'">`;
+    } else {
+        icon1El.textContent = initials1;
+    }
+
+    if (asset2.icon) {
+        icon2El.innerHTML = `<img src="${asset2.icon}" onerror="this.parentElement.textContent='${initials2}'">`;
+    } else {
+        icon2El.textContent = initials2;
+    }
+
+    document.getElementById('createPoolPairName').textContent = `${asset1.symbol} / ${asset2.symbol}`;
+
+    // Reset fee selection to Standard
+    document.querySelectorAll('.fee-option').forEach(opt => opt.classList.remove('selected'));
+    document.querySelector('.fee-option[onclick*="selectPoolFee(2)"]')?.classList.add('selected');
+
+    // Update button state
+    const btn = document.getElementById('createPoolBtn');
+    if (isConnected) {
+        btn.disabled = false;
+        btn.textContent = 'Create Pool';
+    } else {
+        btn.disabled = true;
+        btn.textContent = 'Connect wallet first';
+    }
+
+    document.getElementById('createPoolModal').classList.add('active');
+}
+
+function closeCreatePoolModal() {
+    document.getElementById('createPoolModal').classList.remove('active');
+    createPoolAsset1 = null;
+    createPoolAsset2 = null;
+}
+
+function selectPoolFee(kind) {
+    createPoolKind = kind;
+    document.querySelectorAll('.fee-option').forEach(opt => opt.classList.remove('selected'));
+    document.querySelector(`.fee-option[onclick*="selectPoolFee(${kind})"]`)?.classList.add('selected');
+}
+
+function createPool() {
+    if (!createPoolAsset1 || !createPoolAsset2 || !isConnected) {
+        showNotification('Cannot create pool', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('createPoolBtn');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    // Ensure aid1 < aid2 for consistent pool identification
+    let aid1 = createPoolAsset1.aid;
+    let aid2 = createPoolAsset2.aid;
+    if (aid1 > aid2) {
+        [aid1, aid2] = [aid2, aid1];
+    }
+
+    const args = `action=pool_create,aid1=${aid1},aid2=${aid2},kind=${createPoolKind}`;
+    log('info', 'Creating pool', args);
+
+    invokeShader(DEX_CID, args, (res) => {
+        if (res?.error) {
+            showNotification('Failed: ' + (res.error.message || 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.textContent = 'Create Pool';
+            return;
+        }
+
+        // Check for contract-level error in output
+        if (res?.output) {
+            try {
+                const output = JSON.parse(res.output);
+                if (output.error) {
+                    showNotification('Failed: ' + output.error, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Pool';
+                    return;
+                }
+            } catch(e) {}
+        }
+
+        const rawData = res?.raw_data;
+        if (!rawData) {
+            showNotification('Failed: No transaction data', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Create Pool';
+            return;
+        }
+
+        callApi('process_invoke_data', { data: rawData }, (txRes) => {
+            if (txRes?.error) {
+                showNotification('TX failed: ' + (txRes.error.message || 'Unknown error'), 'error');
+            } else {
+                showNotification('Pool created! TX: ' + (txRes?.txid || 'pending').slice(0, 16) + '...', 'success');
+                closeCreatePoolModal();
+                setTimeout(loadPools, 2000);
+            }
+            btn.disabled = false;
+            btn.textContent = 'Create Pool';
+        });
+    }, false);
+}
+</script>
+</body>
+</html>

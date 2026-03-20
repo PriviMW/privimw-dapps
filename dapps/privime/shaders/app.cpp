@@ -180,6 +180,11 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("cid", "ContractID");
             }
             {
+                Env::DocGroup grM("set_avatar");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("avatar_hash", "string");
+            }
+            {
                 Env::DocGroup grM("resolve_handle");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("handle", "string");
@@ -449,6 +454,16 @@ void On_my_handle(const ContractID& cid)
     if (profile.m_DisplayName[0])
         Env::DocAddText("display_name", profile.m_DisplayName);
     Env::DocAddNum("registered_height", profile.m_RegisteredHeight);
+
+    // Avatar hash lookup
+    Env::Key_T<PriviMe::AvatarKey> avk;
+    _POD_(avk.m_Prefix.m_Cid) = cid;
+    avk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
+    Env::Memset(avk.m_KeyInContract.m_Handle, 0, sizeof(avk.m_KeyInContract.m_Handle));
+    Env::Memcpy(avk.m_KeyInContract.m_Handle, ownerRec.m_Handle, PriviMe::s_MaxHandleLen);
+    PriviMe::AvatarData avd;
+    if (Env::VarReader::Read_T(avk, avd))
+        Env::DocAddBlob_T("avatar_hash", avd.m_Hash);
 }
 
 // Claim @handle: generates a TX kernel for Method_3 (RegisterHandle)
@@ -531,6 +546,40 @@ void On_release_handle(const ContractID& cid)
                         nullptr, 0, &kid, 1, "PriviMe: release handle", 130000);
 }
 
+// Set or clear avatar hash (generates TX kernel for Method_10)
+void On_set_avatar(const ContractID& cid)
+{
+    PriviMe::Method::SetAvatar args;
+    _POD_(args).SetZero();
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+
+    // Read avatar_hash (hex string, 64 chars = 32 bytes)
+    char szHash[65];
+    Env::Memset(szHash, 0, sizeof(szHash));
+    if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
+        // Parse hex string to bytes
+        for (uint32_t i = 0; i < 32; i++) {
+            uint8_t hi = 0, lo = 0;
+            char ch = szHash[i * 2];
+            char cl = szHash[i * 2 + 1];
+            if (ch >= '0' && ch <= '9') hi = ch - '0';
+            else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
+            else if (ch >= 'A' && ch <= 'F') hi = ch - 'A' + 10;
+            if (cl >= '0' && cl <= '9') lo = cl - '0';
+            else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
+            else if (cl >= 'A' && cl <= 'F') lo = cl - 'A' + 10;
+            args.m_Hash[i] = (hi << 4) | lo;
+        }
+    }
+    // If no avatar_hash provided, m_Hash stays all-zero → clears avatar
+
+    Env::KeyID kid(&uk, sizeof(uk));
+    Env::GenerateKernel(&cid, PriviMe::Method::SetAvatar::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: set avatar", 130000);
+}
+
 // Resolve @handle -> WalletID + display_name (view only, no TX)
 void On_resolve_handle(const ContractID& cid)
 {
@@ -559,6 +608,16 @@ void On_resolve_handle(const ContractID& cid)
     Env::DocAddNum("registered_height", profile.m_RegisteredHeight);
     if (profile.m_DisplayName[0])
         Env::DocAddText("display_name", profile.m_DisplayName);
+
+    // Look up avatar hash (tag=3)
+    Env::Key_T<PriviMe::AvatarKey> ak;
+    _POD_(ak.m_Prefix.m_Cid) = cid;
+    ak.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
+    Env::Memset(ak.m_KeyInContract.m_Handle, 0, sizeof(ak.m_KeyInContract.m_Handle));
+    Env::Memcpy(ak.m_KeyInContract.m_Handle, szHandle, PriviMe::s_MaxHandleLen);
+    PriviMe::AvatarData avatarData;
+    if (Env::VarReader::Read_T(ak, avatarData))
+        Env::DocAddBlob_T("avatar_hash", avatarData.m_Hash);
 }
 
 // Prefix search: returns all handles starting with the given prefix (max 20 results)
@@ -608,6 +667,14 @@ void On_search_handles(const ContractID& cid)
         Env::DocAddNum("registered_height", p.m_RegisteredHeight);
         if (p.m_DisplayName[0])
             Env::DocAddText("display_name", p.m_DisplayName);
+        // Avatar hash lookup
+        Env::Key_T<PriviMe::AvatarKey> avk;
+        _POD_(avk.m_Prefix.m_Cid) = cid;
+        avk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
+        Env::Memcpy(avk.m_KeyInContract.m_Handle, key.m_KeyInContract.m_Handle, sizeof(avk.m_KeyInContract.m_Handle));
+        PriviMe::AvatarData avd;
+        if (Env::VarReader::Read_T(avk, avd))
+            Env::DocAddBlob_T("avatar_hash", avd.m_Hash);
         count++;
     }
 }
@@ -751,6 +818,7 @@ BEAM_EXPORT void Method_1()
         if (!Env::Strcmp(szAction, "register_handle"))  return On_register_handle(cid);
         if (!Env::Strcmp(szAction, "update_profile"))   return On_update_profile(cid);
         if (!Env::Strcmp(szAction, "release_handle"))   return On_release_handle(cid);
+        if (!Env::Strcmp(szAction, "set_avatar"))       return On_set_avatar(cid);
         if (!Env::Strcmp(szAction, "resolve_handle"))   return On_resolve_handle(cid);
         if (!Env::Strcmp(szAction, "search_handles"))  return On_search_handles(cid);
         if (!Env::Strcmp(szAction, "resolve_walletid")) return On_resolve_walletid(cid);

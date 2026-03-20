@@ -275,3 +275,35 @@ BEAM_EXPORT void Method_9(const PriviMe::Method::SetConfig& r)
 
     Env::AddSig(s.m_OwnerPk);
 }
+
+// ============================================================================
+// Method 10: SetAvatar — Set or clear avatar hash (Phase 1b)
+// ============================================================================
+BEAM_EXPORT void Method_10(const PriviMe::Method::SetAvatar& r)
+{
+    // Verify caller owns a handle (reverse lookup)
+    PriviMe::OwnerKey ok;
+    _POD_(ok.m_UserPk) = r.m_UserPk;
+    PriviMe::OwnerRecord ownerRec;
+    Env::Halt_if(!Env::LoadVar_T(ok, ownerRec));
+
+    // Build avatar key from handle
+    PriviMe::AvatarKey ak;
+    Env::Memcpy(ak.m_Handle, ownerRec.m_Handle, sizeof(ak.m_Handle));
+
+    // Check if hash is all-zero (clear avatar)
+    PriviMe::AvatarData zeroHash;
+    Env::Memset(&zeroHash, 0, sizeof(zeroHash));
+
+    if (Env::Memcmp(r.m_Hash, &zeroHash, sizeof(zeroHash)) == 0) {
+        // Clear avatar
+        Env::DelVar_T(ak);
+    } else {
+        // Set avatar hash
+        PriviMe::AvatarData ad;
+        Env::Memcpy(ad.m_Hash, r.m_Hash, sizeof(ad.m_Hash));
+        Env::SaveVar_T(ak, ad);
+    }
+
+    Env::AddSig(r.m_UserPk);
+}
