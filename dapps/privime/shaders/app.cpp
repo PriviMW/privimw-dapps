@@ -494,6 +494,21 @@ void On_register_handle(const ContractID& cid)
         return OnError("wallet_id must be 34 bytes");
     }
 
+    // Read avatar hash (optional, 64 hex chars)
+    {
+        char szHash[65];
+        Env::Memset(szHash, 0, sizeof(szHash));
+        if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
+            for (uint32_t i = 0; i < 32; i++) {
+                uint8_t hi = 0, lo = 0;
+                char ch = szHash[i * 2], cl = szHash[i * 2 + 1];
+                if (ch >= '0' && ch <= '9') hi = ch - '0'; else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
+                if (cl >= '0' && cl <= '9') lo = cl - '0'; else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
+                args.m_AvatarHash[i] = (hi << 4) | lo;
+            }
+        }
+    }
+
     // Read state to get asset ID and fee
     PriviMe::State s;
     if (!ReadState(cid, s)) return;
@@ -524,6 +539,21 @@ void On_update_profile(const ContractID& cid)
         return OnError("wallet_id must be 34 bytes");
     }
     Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
+
+    // Read avatar hash (optional, 64 hex chars)
+    {
+        char szHash[65];
+        Env::Memset(szHash, 0, sizeof(szHash));
+        if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
+            for (uint32_t i = 0; i < 32; i++) {
+                uint8_t hi = 0, lo = 0;
+                char ch = szHash[i * 2], cl = szHash[i * 2 + 1];
+                if (ch >= '0' && ch <= '9') hi = ch - '0'; else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
+                if (cl >= '0' && cl <= '9') lo = cl - '0'; else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
+                args.m_AvatarHash[i] = (hi << 4) | lo;
+            }
+        }
+    }
 
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);

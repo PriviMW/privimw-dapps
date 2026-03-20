@@ -157,6 +157,17 @@ BEAM_EXPORT void Method_3(const PriviMe::Method::RegisterHandle& r)
     Env::Memcpy(ownerRec.m_Handle, r.m_Handle, handleLen);
     Env::SaveVar_T(ok, ownerRec);
 
+    // Save avatar if provided (non-zero hash)
+    PriviMe::AvatarData zeroHash;
+    Env::Memset(&zeroHash, 0, sizeof(zeroHash));
+    if (Env::Memcmp(r.m_AvatarHash, &zeroHash, sizeof(zeroHash)) != 0) {
+        PriviMe::AvatarKey ak;
+        Env::Memcpy(ak.m_Handle, hk.m_Handle, sizeof(ak.m_Handle));
+        PriviMe::AvatarData ad;
+        Env::Memcpy(ad.m_Hash, r.m_AvatarHash, sizeof(ad.m_Hash));
+        Env::SaveVar_T(ak, ad);
+    }
+
     // Update state
     s.m_TotalRegistrations++;
     s.m_TotalFees += s.m_RegistrationFee;
@@ -190,6 +201,17 @@ BEAM_EXPORT void Method_4(const PriviMe::Method::UpdateProfile& r)
     if (displayLen > 0)
         Env::Memcpy(profile.m_DisplayName, r.m_DisplayName, displayLen);
     Env::SaveVar_T(hk, profile);
+
+    // Update avatar if provided (non-zero = set, all-zero = no change)
+    PriviMe::AvatarData zeroHash;
+    Env::Memset(&zeroHash, 0, sizeof(zeroHash));
+    if (Env::Memcmp(r.m_AvatarHash, &zeroHash, sizeof(zeroHash)) != 0) {
+        PriviMe::AvatarKey ak;
+        Env::Memcpy(ak.m_Handle, ownerRec.m_Handle, sizeof(ak.m_Handle));
+        PriviMe::AvatarData ad;
+        Env::Memcpy(ad.m_Hash, r.m_AvatarHash, sizeof(ad.m_Hash));
+        Env::SaveVar_T(ak, ad);
+    }
 
     Env::AddSig(r.m_UserPk);
 }
