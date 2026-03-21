@@ -235,7 +235,6 @@ BEAM_EXPORT void Method_0()
                 Env::DocGroup grM("join_group");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("group_id", "hex32");
-                Env::DocAddText("invite_secret", "hex32");
             }
             {
                 Env::DocGroup grM("remove_member");
@@ -267,39 +266,10 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("group_id", "hex32");
             }
             {
-                Env::DocGroup grM("approve_join_request");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
-                Env::DocAddText("target_handle", "string");
-                Env::DocAddText("approve", "uint32");
-            }
-            {
-                Env::DocGroup grM("set_invite_link");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
-                Env::DocAddText("invite_hash", "hex32");
-                Env::DocAddText("expiry_height", "uint32");
-            }
-            {
                 Env::DocGroup grM("transfer_ownership");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("group_id", "hex32");
                 Env::DocAddText("new_creator", "string");
-            }
-            {
-                Env::DocGroup grM("set_group_pin");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
-                Env::DocAddText("sender_handle", "string");
-                Env::DocAddText("message_hash", "hex32");
-                Env::DocAddText("unpin", "uint32");
-            }
-            {
-                Env::DocGroup grM("report_member");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
-                Env::DocAddText("target_handle", "string");
-                Env::DocAddText("reason", "uint32");
             }
             {
                 Env::DocGroup grM("delete_group");
@@ -325,16 +295,6 @@ BEAM_EXPORT void Method_0()
                 Env::DocGroup grM("search_groups");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("prefix", "string");
-            }
-            {
-                Env::DocGroup grM("view_join_requests");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
-            }
-            {
-                Env::DocGroup grM("view_group_pins");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("group_id", "hex32");
             }
         }
     }
@@ -808,6 +768,9 @@ void On_create_group(const ContractID& cid)
     Env::DocGet("max_members", args.m_MaxMembers);
     Env::DocGet("default_permissions", args.m_DefaultPermissions);
 
+    // Optional join password for private groups (32 raw bytes)
+    Env::DocGetBlob("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
+
     // Generate nonce from current height for unique group_id
     Height h = Env::get_Height();
     args.m_Nonce = (uint32_t)(h ^ 0xDEADBEEF);
@@ -827,15 +790,15 @@ void On_join_group(const ContractID& cid)
 
     if (!DocGetGroupId(args.m_GroupId)) return;
 
-    // Optional invite secret (for private groups)
-    Env::DocGetBlob("invite_secret", args.m_InviteSecret, 32);
+    // Optional join password for private groups
+    Env::DocGetBlob("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
 
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);
     Env::KeyID kid(&uk, sizeof(uk));
 
     Env::GenerateKernel(&cid, PriviMe::Method::JoinGroup::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: join group", 200000);
+                        nullptr, 0, &kid, 1, "PriviMe: join group", 250000);
 }
 
 void On_remove_member(const ContractID& cid)
@@ -929,44 +892,6 @@ void On_leave_group(const ContractID& cid)
                         nullptr, 0, &kid, 1, "PriviMe: leave group", 150000);
 }
 
-void On_approve_join_request(const ContractID& cid)
-{
-    PriviMe::Method::ApproveJoinRequest args;
-    _POD_(args).SetZero();
-
-    if (!DocGetGroupId(args.m_GroupId)) return;
-    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
-
-    uint32_t approve = 1;
-    Env::DocGet("approve", approve);
-    args.m_Approve = (uint8_t)approve;
-
-    UserKey uk(cid);
-    uk.DerivePk(args.m_UserPk);
-    Env::KeyID kid(&uk, sizeof(uk));
-
-    Env::GenerateKernel(&cid, PriviMe::Method::ApproveJoinRequest::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: approve join request", 200000);
-}
-
-void On_set_invite_link(const ContractID& cid)
-{
-    PriviMe::Method::SetInviteLink args;
-    _POD_(args).SetZero();
-
-    if (!DocGetGroupId(args.m_GroupId)) return;
-
-    Env::DocGetBlob("invite_hash", args.m_InviteHash, 32);
-    Env::DocGet("expiry_height", args.m_ExpiryHeight);
-
-    UserKey uk(cid);
-    uk.DerivePk(args.m_UserPk);
-    Env::KeyID kid(&uk, sizeof(uk));
-
-    Env::GenerateKernel(&cid, PriviMe::Method::SetInviteLink::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: set invite link", 150000);
-}
-
 void On_transfer_ownership(const ContractID& cid)
 {
     PriviMe::Method::TransferOwnership args;
@@ -990,52 +915,6 @@ void On_transfer_ownership(const ContractID& cid)
 
     Env::GenerateKernel(&cid, PriviMe::Method::TransferOwnership::s_iMethod, &args, sizeof(args),
                         nullptr, 0, &kid, 1, "PriviMe: transfer ownership", 200000);
-}
-
-void On_set_group_pin(const ContractID& cid)
-{
-    PriviMe::Method::SetGroupPin args;
-    _POD_(args).SetZero();
-
-    if (!DocGetGroupId(args.m_GroupId)) return;
-
-    char szSender[PriviMe::s_MaxHandleLen + 1];
-    Env::Memset(szSender, 0, sizeof(szSender));
-    Env::DocGetText("sender_handle", szSender, sizeof(szSender));
-    Env::Memcpy(args.m_SenderHandle, szSender, PriviMe::s_MaxHandleLen);
-
-    Env::DocGetBlob("message_hash", args.m_MessageHash, 32);
-
-    uint32_t unpin = 0;
-    Env::DocGet("unpin", unpin);
-    args.m_Unpin = (uint8_t)unpin;
-
-    UserKey uk(cid);
-    uk.DerivePk(args.m_UserPk);
-    Env::KeyID kid(&uk, sizeof(uk));
-
-    Env::GenerateKernel(&cid, PriviMe::Method::SetGroupPin::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: set group pin", 250000);
-}
-
-void On_report_member(const ContractID& cid)
-{
-    PriviMe::Method::ReportMember args;
-    _POD_(args).SetZero();
-
-    if (!DocGetGroupId(args.m_GroupId)) return;
-    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
-
-    uint32_t reason = 0;
-    Env::DocGet("reason", reason);
-    args.m_Reason = (uint8_t)reason;
-
-    UserKey uk(cid);
-    uk.DerivePk(args.m_UserPk);
-    Env::KeyID kid(&uk, sizeof(uk));
-
-    Env::GenerateKernel(&cid, PriviMe::Method::ReportMember::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: report member", 150000);
 }
 
 void On_delete_group(const ContractID& cid)
@@ -1080,9 +959,6 @@ void On_view_group(const ContractID& cid)
     Env::DocAddNum("member_count", gi.m_MemberCount);
     Env::DocAddNum("default_permissions", gi.m_DefaultPermissions);
     Env::DocAddNum("created_height", gi.m_CreatedHeight);
-    Env::DocAddNum("pin_count", gi.m_PinCount);
-    Env::DocAddNum("invite_expiry_height", gi.m_InviteExpiryHeight);
-
     if (!IsZero32(gi.m_DescriptionHash))
         DocAddGroupId("description_hash", gi.m_DescriptionHash);
     if (!IsZero32(gi.m_AvatarHash))
@@ -1235,69 +1111,6 @@ void On_search_groups(const ContractID& cid)
     }
 }
 
-void On_view_join_requests(const ContractID& cid)
-{
-    uint8_t groupId[32];
-    if (!DocGetGroupId(groupId)) return;
-
-    Env::Key_T<PriviMe::GroupJoinRequestKey> k0, k1;
-    _POD_(k0.m_Prefix.m_Cid) = cid;
-    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_JoinReq;
-    Env::Memcpy(k0.m_KeyInContract.m_GroupId, groupId, 32);
-    Env::Memset(k0.m_KeyInContract.m_Handle, 0, sizeof(k0.m_KeyInContract.m_Handle));
-
-    _POD_(k1.m_Prefix.m_Cid) = cid;
-    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_JoinReq;
-    Env::Memcpy(k1.m_KeyInContract.m_GroupId, groupId, 32);
-    Env::Memset(k1.m_KeyInContract.m_Handle, 0xFF, sizeof(k1.m_KeyInContract.m_Handle));
-
-    Env::DocArray gr("requests");
-    uint32_t count = 0;
-    Env::VarReader scanner(k0, k1);
-    Env::Key_T<PriviMe::GroupJoinRequestKey> key;
-    PriviMe::JoinRequest jr;
-    while (scanner.MoveNext_T(key, jr) && count < 50) {
-        Env::DocGroup entry("");
-        Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
-        Env::DocAddNum("request_height", jr.m_RequestHeight);
-        count++;
-    }
-}
-
-void On_view_group_pins(const ContractID& cid)
-{
-    uint8_t groupId[32];
-    if (!DocGetGroupId(groupId)) return;
-
-    // Read group to get pin count
-    Env::Key_T<PriviMe::GroupKey> gk;
-    _POD_(gk.m_Prefix.m_Cid) = cid;
-    gk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
-    Env::Memcpy(gk.m_KeyInContract.m_GroupId, groupId, 32);
-
-    PriviMe::GroupInfo gi;
-    if (!Env::VarReader::Read_T(gk, gi))
-        return OnError("group not found");
-
-    Env::DocArray gr("pins");
-    for (uint32_t i = 0; i < gi.m_PinCount; i++) {
-        Env::Key_T<PriviMe::GroupPinKey> pk;
-        _POD_(pk.m_Prefix.m_Cid) = cid;
-        pk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Pin;
-        Env::Memcpy(pk.m_KeyInContract.m_GroupId, groupId, 32);
-        pk.m_KeyInContract.m_PinIndex = i;
-
-        PriviMe::PinInfo pi;
-        if (Env::VarReader::Read_T(pk, pi)) {
-            Env::DocGroup entry("");
-            Env::DocAddText("sender", pi.m_SenderHandle);
-            DocAddGroupId("message_hash", pi.m_MessageHash);
-            Env::DocAddNum("pinned_height", pi.m_PinnedHeight);
-            Env::DocAddNum("index", i);
-        }
-    }
-}
-
 // ============================================================================
 // Dispatcher: Method_1
 // ============================================================================
@@ -1349,19 +1162,13 @@ BEAM_EXPORT void Method_1()
         if (!Env::Strcmp(szAction, "set_member_role"))     return On_set_member_role(cid);
         if (!Env::Strcmp(szAction, "update_group_info"))   return On_update_group_info(cid);
         if (!Env::Strcmp(szAction, "leave_group"))         return On_leave_group(cid);
-        if (!Env::Strcmp(szAction, "approve_join_request")) return On_approve_join_request(cid);
-        if (!Env::Strcmp(szAction, "set_invite_link"))     return On_set_invite_link(cid);
         if (!Env::Strcmp(szAction, "transfer_ownership"))  return On_transfer_ownership(cid);
-        if (!Env::Strcmp(szAction, "set_group_pin"))       return On_set_group_pin(cid);
-        if (!Env::Strcmp(szAction, "report_member"))       return On_report_member(cid);
         if (!Env::Strcmp(szAction, "delete_group"))        return On_delete_group(cid);
         // Group views
         if (!Env::Strcmp(szAction, "view_group"))          return On_view_group(cid);
         if (!Env::Strcmp(szAction, "list_members"))        return On_list_members(cid);
         if (!Env::Strcmp(szAction, "list_my_groups"))      return On_list_my_groups(cid);
         if (!Env::Strcmp(szAction, "search_groups"))       return On_search_groups(cid);
-        if (!Env::Strcmp(szAction, "view_join_requests"))  return On_view_join_requests(cid);
-        if (!Env::Strcmp(szAction, "view_group_pins"))     return On_view_group_pins(cid);
         return OnError("invalid action");
     }
 

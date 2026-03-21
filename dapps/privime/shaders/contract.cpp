@@ -1,6 +1,7 @@
 // PriviMe Contract Shader
 // On-chain identity registry + group chat system.
 // Upgradable3 provides Method_2 (upgrade dispatch). Business logic starts at Method_3.
+// Methods 3-9: identity. Methods 10-17: group chat (8 methods).
 #include "common.h"
 #include "upgradable3/contract_impl.h"
 #include "contract.h"
@@ -68,7 +69,6 @@ uint32_t SafeStrlen(const char* s, uint32_t maxLen)
 // Group helpers
 // ============================================================================
 
-// Look up caller's handle from their BVM PubKey (reverse lookup)
 bool GetCallerHandle(const PubKey& pk, char* outHandle)
 {
     OwnerKey ok;
@@ -80,7 +80,6 @@ bool GetCallerHandle(const PubKey& pk, char* outHandle)
     return true;
 }
 
-// Load group info by group_id
 bool LoadGroup(const uint8_t* groupId, GroupInfo& gi)
 {
     GroupKey gk;
@@ -88,7 +87,6 @@ bool LoadGroup(const uint8_t* groupId, GroupInfo& gi)
     return Env::LoadVar_T(gk, gi);
 }
 
-// Save group info
 void SaveGroup(const uint8_t* groupId, const GroupInfo& gi)
 {
     GroupKey gk;
@@ -96,7 +94,6 @@ void SaveGroup(const uint8_t* groupId, const GroupInfo& gi)
     Env::SaveVar_T(gk, gi);
 }
 
-// Load member info
 bool LoadMember(const uint8_t* groupId, const char* handle, MemberInfo& mi)
 {
     GroupMemberKey mk;
@@ -105,7 +102,6 @@ bool LoadMember(const uint8_t* groupId, const char* handle, MemberInfo& mi)
     return Env::LoadVar_T(mk, mi);
 }
 
-// Save member info
 void SaveMember(const uint8_t* groupId, const char* handle, const MemberInfo& mi)
 {
     GroupMemberKey mk;
@@ -114,7 +110,6 @@ void SaveMember(const uint8_t* groupId, const char* handle, const MemberInfo& mi
     Env::SaveVar_T(mk, mi);
 }
 
-// Delete member record
 void DeleteMember(const uint8_t* groupId, const char* handle)
 {
     GroupMemberKey mk;
@@ -123,7 +118,6 @@ void DeleteMember(const uint8_t* groupId, const char* handle)
     Env::DelVar_T(mk);
 }
 
-// Check if handle is registered (exists in identity system)
 bool IsRegisteredHandle(const char* handle)
 {
     HandleKey hk;
@@ -133,13 +127,11 @@ bool IsRegisteredHandle(const char* handle)
     return Env::LoadVar_T(hk, p);
 }
 
-// Check if two handles match
 bool HandlesMatch(const char* a, const char* b)
 {
     return Env::Memcmp(a, b, s_MaxHandleLen) == 0;
 }
 
-// Check if a 32-byte value is all zeros
 bool IsZero32(const uint8_t* p)
 {
     for (uint32_t i = 0; i < 32; i++)
@@ -147,7 +139,6 @@ bool IsZero32(const uint8_t* p)
     return true;
 }
 
-// Get user group count
 uint32_t GetGroupCount(const char* handle)
 {
     UserGroupCountKey ck;
@@ -158,7 +149,6 @@ uint32_t GetGroupCount(const char* handle)
     return 0;
 }
 
-// Set user group count
 void SetGroupCount(const char* handle, uint32_t count)
 {
     UserGroupCountKey ck;
@@ -352,16 +342,13 @@ BEAM_EXPORT void Method_9(const PriviMe::Method::SetConfig& r)
 // ============================================================================
 BEAM_EXPORT void Method_10(const PriviMe::Method::CreateGroup& r)
 {
-    // Verify caller has a registered handle
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Check group creation limit
     uint32_t grpCount = PriviMe::GetGroupCount(callerHandle);
     Env::Halt_if(grpCount >= PriviMe::s_MaxGroupsPerUser);
 
-    // Validate group name
     uint32_t nameLen = PriviMe::SafeStrlen(r.m_Name, PriviMe::s_MaxGroupNameLen);
     Env::Halt_if(nameLen < 1);
 
@@ -378,11 +365,9 @@ BEAM_EXPORT void Method_10(const PriviMe::Method::CreateGroup& r)
     uint8_t groupId[32];
     Env::Memcpy(groupId, &groupIdHash, 32);
 
-    // Ensure group_id doesn't already exist (collision check)
     PriviMe::GroupInfo existing;
     Env::Halt_if(PriviMe::LoadGroup(groupId, existing));
 
-    // Create group info
     PriviMe::GroupInfo gi;
     _POD_(gi).SetZero();
     Env::Memcpy(gi.m_Name, r.m_Name, nameLen);
@@ -394,18 +379,26 @@ BEAM_EXPORT void Method_10(const PriviMe::Method::CreateGroup& r)
     gi.m_DefaultPermissions = (r.m_DefaultPermissions > 0)
         ? r.m_DefaultPermissions : PriviMe::Perm::s_Default;
     gi.m_CreatedHeight = (uint32_t)h;
-    gi.m_MemberCount = 1; // Creator is first member
-    gi.m_PinCount = 0;
+    gi.m_MemberCount = 1;
+
+    // Hash the join password if provided (non-zero)
+    if (!PriviMe::IsZero32(r.m_JoinPassword)) {
+        HashProcessor::Sha256 pwHp;
+        Env::HashWrite(pwHp.m_p, r.m_JoinPassword, 32);
+        HashValue pwHash;
+        Env::HashGetValue(pwHp.m_p, &pwHash, sizeof(pwHash));
+        Env::Memcpy(gi.m_JoinPasswordHash, &pwHash, 32);
+    }
+    // else: m_JoinPasswordHash is already zero from SetZero()
+
     PriviMe::SaveGroup(groupId, gi);
 
-    // Add creator as first member with Creator role + all permissions
     PriviMe::MemberInfo mi;
     mi.m_Role = PriviMe::Role::s_Creator;
     mi.m_Permissions = PriviMe::Perm::s_All;
     mi.m_JoinedHeight = (uint32_t)h;
     PriviMe::SaveMember(groupId, callerHandle, mi);
 
-    // Increment user's group creation count
     PriviMe::SetGroupCount(callerHandle, grpCount + 1);
 
     Env::AddSig(r.m_UserPk);
@@ -416,74 +409,43 @@ BEAM_EXPORT void Method_10(const PriviMe::Method::CreateGroup& r)
 // ============================================================================
 BEAM_EXPORT void Method_11(const PriviMe::Method::JoinGroup& r)
 {
-    // Verify caller has a registered handle
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Check not already a member
+    // Check not already a member or banned
     PriviMe::MemberInfo existingMi;
     if (PriviMe::LoadMember(r.m_GroupId, callerHandle, existingMi)) {
-        // Already exists — reject if active member or banned
-        Env::Halt_if(existingMi.m_Role != PriviMe::Role::s_Banned); // already a member
+        Env::Halt_if(existingMi.m_Role != PriviMe::Role::s_Banned);
         Env::Halt(); // banned — can't rejoin
     }
 
-    // Check member limit
     Env::Halt_if(gi.m_MemberCount >= gi.m_MaxMembers);
 
-    if (gi.m_IsPublic) {
-        // Public group
-        if (gi.m_RequireApproval) {
-            // Create join request (admin must approve)
-            PriviMe::GroupJoinRequestKey jk;
-            Env::Memcpy(jk.m_GroupId, r.m_GroupId, 32);
-            Env::Memcpy(jk.m_Handle, callerHandle, PriviMe::s_MaxHandleLen);
-            PriviMe::JoinRequest jr;
-            jr.m_RequestHeight = (uint32_t)Env::get_Height();
-            Env::SaveVar_T(jk, jr);
-            // Don't add as member yet — wait for approval
-        } else {
-            // Auto-join: add as member immediately
-            PriviMe::MemberInfo mi;
-            mi.m_Role = PriviMe::Role::s_Member;
-            mi.m_Permissions = gi.m_DefaultPermissions;
-            mi.m_JoinedHeight = (uint32_t)Env::get_Height();
-            PriviMe::SaveMember(r.m_GroupId, callerHandle, mi);
+    // If group has a join password, verify it
+    if (!PriviMe::IsZero32(gi.m_JoinPasswordHash)) {
+        // Caller must provide the correct password
+        Env::Halt_if(PriviMe::IsZero32(r.m_JoinPassword)); // no password provided
 
-            gi.m_MemberCount++;
-            PriviMe::SaveGroup(r.m_GroupId, gi);
-        }
-    } else {
-        // Private group — need valid invite secret
-        Env::Halt_if(PriviMe::IsZero32(r.m_InviteSecret)); // must provide secret
-
-        // Check invite hasn't expired
-        if (gi.m_InviteExpiryHeight > 0) {
-            Env::Halt_if(Env::get_Height() > gi.m_InviteExpiryHeight);
-        }
-
-        // Verify: SHA256(provided_secret) == stored invite_hash
-        HashProcessor::Sha256 hp;
-        Env::HashWrite(hp.m_p, r.m_InviteSecret, 32);
+        // Hash the provided password and compare
+        HashProcessor::Sha256 pwHp;
+        Env::HashWrite(pwHp.m_p, r.m_JoinPassword, 32);
         HashValue computedHash;
-        Env::HashGetValue(hp.m_p, &computedHash, sizeof(computedHash));
-        Env::Halt_if(Env::Memcmp(&computedHash, gi.m_InviteHash, 32) != 0);
-
-        // Valid invite — add as member
-        PriviMe::MemberInfo mi;
-        mi.m_Role = PriviMe::Role::s_Member;
-        mi.m_Permissions = gi.m_DefaultPermissions;
-        mi.m_JoinedHeight = (uint32_t)Env::get_Height();
-        PriviMe::SaveMember(r.m_GroupId, callerHandle, mi);
-
-        gi.m_MemberCount++;
-        PriviMe::SaveGroup(r.m_GroupId, gi);
+        Env::HashGetValue(pwHp.m_p, &computedHash, sizeof(computedHash));
+        Env::Halt_if(Env::Memcmp(&computedHash, gi.m_JoinPasswordHash, 32) != 0);
     }
+
+    PriviMe::MemberInfo mi;
+    mi.m_Role = PriviMe::Role::s_Member;
+    mi.m_Permissions = gi.m_DefaultPermissions;
+    mi.m_JoinedHeight = (uint32_t)Env::get_Height();
+    PriviMe::SaveMember(r.m_GroupId, callerHandle, mi);
+
+    gi.m_MemberCount++;
+    PriviMe::SaveGroup(r.m_GroupId, gi);
 
     Env::AddSig(r.m_UserPk);
 }
@@ -493,44 +455,32 @@ BEAM_EXPORT void Method_11(const PriviMe::Method::JoinGroup& r)
 // ============================================================================
 BEAM_EXPORT void Method_12(const PriviMe::Method::RemoveMember& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Load caller's membership
     PriviMe::MemberInfo callerMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
-
-    // Must be admin or creator
     Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Admin && callerMi.m_Role != PriviMe::Role::s_Creator);
 
-    // Can't remove/ban yourself
     Env::Halt_if(PriviMe::HandlesMatch(callerHandle, r.m_TargetHandle));
 
-    // Load target's membership
     PriviMe::MemberInfo targetMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, r.m_TargetHandle, targetMi));
-
-    // Can't remove/ban the creator
     Env::Halt_if(targetMi.m_Role == PriviMe::Role::s_Creator);
 
-    // Admins can't remove other admins (only creator can)
     if (targetMi.m_Role == PriviMe::Role::s_Admin) {
         Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Creator);
     }
 
     if (r.m_Ban) {
-        // Ban: keep record with banned role (prevents rejoin)
         targetMi.m_Role = PriviMe::Role::s_Banned;
         targetMi.m_Permissions = 0;
         PriviMe::SaveMember(r.m_GroupId, r.m_TargetHandle, targetMi);
     } else {
-        // Remove: delete member record entirely
         PriviMe::DeleteMember(r.m_GroupId, r.m_TargetHandle);
     }
 
@@ -545,31 +495,23 @@ BEAM_EXPORT void Method_12(const PriviMe::Method::RemoveMember& r)
 // ============================================================================
 BEAM_EXPORT void Method_13(const PriviMe::Method::SetMemberRole& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Only creator can change roles
     PriviMe::MemberInfo callerMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
     Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Creator);
 
-    // Can't change own role
     Env::Halt_if(PriviMe::HandlesMatch(callerHandle, r.m_TargetHandle));
 
-    // Load target
     PriviMe::MemberInfo targetMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, r.m_TargetHandle, targetMi));
-
-    // Can't change banned members' roles (must unban first via remove+rejoin)
     Env::Halt_if(targetMi.m_Role == PriviMe::Role::s_Banned);
 
-    // Only allow setting to Admin or Member (not Creator or Banned)
     Env::Halt_if(r.m_NewRole != PriviMe::Role::s_Admin && r.m_NewRole != PriviMe::Role::s_Member);
 
     targetMi.m_Role = r.m_NewRole;
@@ -585,23 +527,19 @@ BEAM_EXPORT void Method_13(const PriviMe::Method::SetMemberRole& r)
 // ============================================================================
 BEAM_EXPORT void Method_14(const PriviMe::Method::UpdateGroupInfo& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Must be admin or creator with ChangeInfo permission
     PriviMe::MemberInfo callerMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
     Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Admin && callerMi.m_Role != PriviMe::Role::s_Creator);
     if (callerMi.m_Role == PriviMe::Role::s_Admin)
         Env::Halt_if(!(callerMi.m_Permissions & PriviMe::Perm::s_ChangeInfo));
 
-    // Update fields (only non-sentinel values)
     uint32_t nameLen = PriviMe::SafeStrlen(r.m_Name, PriviMe::s_MaxGroupNameLen);
     if (nameLen > 0) {
         Env::Memset(gi.m_Name, 0, sizeof(gi.m_Name));
@@ -633,23 +571,19 @@ BEAM_EXPORT void Method_14(const PriviMe::Method::UpdateGroupInfo& r)
 // ============================================================================
 BEAM_EXPORT void Method_15(const PriviMe::Method::LeaveGroup& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Load caller's membership
     PriviMe::MemberInfo callerMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
 
     // Creator can't leave — must TransferOwnership or DeleteGroup
     Env::Halt_if(callerMi.m_Role == PriviMe::Role::s_Creator);
 
-    // Remove member
     PriviMe::DeleteMember(r.m_GroupId, callerHandle);
 
     gi.m_MemberCount--;
@@ -659,120 +593,35 @@ BEAM_EXPORT void Method_15(const PriviMe::Method::LeaveGroup& r)
 }
 
 // ============================================================================
-// Method 16: ApproveJoinRequest — Admin or Creator
+// Method 16: TransferOwnership — Creator only
 // ============================================================================
-BEAM_EXPORT void Method_16(const PriviMe::Method::ApproveJoinRequest& r)
+BEAM_EXPORT void Method_16(const PriviMe::Method::TransferOwnership& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Must be admin or creator
-    PriviMe::MemberInfo callerMi;
-    Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
-    Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Admin && callerMi.m_Role != PriviMe::Role::s_Creator);
-
-    // Load join request
-    PriviMe::GroupJoinRequestKey jk;
-    Env::Memcpy(jk.m_GroupId, r.m_GroupId, 32);
-    Env::Memcpy(jk.m_Handle, r.m_TargetHandle, PriviMe::s_MaxHandleLen);
-    PriviMe::JoinRequest jr;
-    Env::Halt_if(!Env::LoadVar_T(jk, jr));
-
-    // Delete the join request regardless of approve/reject
-    Env::DelVar_T(jk);
-
-    if (r.m_Approve) {
-        // Check member limit
-        Env::Halt_if(gi.m_MemberCount >= gi.m_MaxMembers);
-
-        // Verify target handle still exists
-        Env::Halt_if(!PriviMe::IsRegisteredHandle(r.m_TargetHandle));
-
-        // Add as member
-        PriviMe::MemberInfo mi;
-        mi.m_Role = PriviMe::Role::s_Member;
-        mi.m_Permissions = gi.m_DefaultPermissions;
-        mi.m_JoinedHeight = (uint32_t)Env::get_Height();
-        PriviMe::SaveMember(r.m_GroupId, r.m_TargetHandle, mi);
-
-        gi.m_MemberCount++;
-        PriviMe::SaveGroup(r.m_GroupId, gi);
-    }
-
-    Env::AddSig(r.m_UserPk);
-}
-
-// ============================================================================
-// Method 17: SetInviteLink — Admin or Creator
-// ============================================================================
-BEAM_EXPORT void Method_17(const PriviMe::Method::SetInviteLink& r)
-{
-    // Verify caller
-    char callerHandle[PriviMe::s_MaxHandleLen];
-    Env::Memset(callerHandle, 0, sizeof(callerHandle));
-    Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
-
-    // Load group
-    PriviMe::GroupInfo gi;
-    Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
-
-    // Must be admin or creator
-    PriviMe::MemberInfo callerMi;
-    Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
-    Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Admin && callerMi.m_Role != PriviMe::Role::s_Creator);
-
-    // Update invite hash and expiry
-    Env::Memcpy(gi.m_InviteHash, r.m_InviteHash, 32);
-    gi.m_InviteExpiryHeight = r.m_ExpiryHeight;
-    PriviMe::SaveGroup(r.m_GroupId, gi);
-
-    Env::AddSig(r.m_UserPk);
-}
-
-// ============================================================================
-// Method 18: TransferOwnership — Creator only
-// ============================================================================
-BEAM_EXPORT void Method_18(const PriviMe::Method::TransferOwnership& r)
-{
-    // Verify caller
-    char callerHandle[PriviMe::s_MaxHandleLen];
-    Env::Memset(callerHandle, 0, sizeof(callerHandle));
-    Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
-
-    // Load group
-    PriviMe::GroupInfo gi;
-    Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
-
-    // Only creator can transfer
     PriviMe::MemberInfo callerMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
     Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Creator);
 
-    // Target must be a current member (not banned)
     PriviMe::MemberInfo targetMi;
     Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, r.m_NewCreatorHandle, targetMi));
     Env::Halt_if(targetMi.m_Role == PriviMe::Role::s_Banned);
 
-    // Transfer: new creator gets Creator role + all permissions
     targetMi.m_Role = PriviMe::Role::s_Creator;
     targetMi.m_Permissions = PriviMe::Perm::s_All;
     PriviMe::SaveMember(r.m_GroupId, r.m_NewCreatorHandle, targetMi);
 
-    // Old creator becomes admin
     callerMi.m_Role = PriviMe::Role::s_Admin;
     PriviMe::SaveMember(r.m_GroupId, callerHandle, callerMi);
 
-    // Update creator in group info
     Env::Memcpy(gi.m_CreatorHandle, r.m_NewCreatorHandle, PriviMe::s_MaxHandleLen);
     PriviMe::SaveGroup(r.m_GroupId, gi);
 
-    // Transfer group count: decrement old creator, increment new
     uint32_t oldCount = PriviMe::GetGroupCount(callerHandle);
     if (oldCount > 0)
         PriviMe::SetGroupCount(callerHandle, oldCount - 1);
@@ -784,158 +633,26 @@ BEAM_EXPORT void Method_18(const PriviMe::Method::TransferOwnership& r)
 }
 
 // ============================================================================
-// Method 19: SetGroupPin — Admin or Creator
+// Method 17: DeleteGroup — Creator only
 // ============================================================================
-BEAM_EXPORT void Method_19(const PriviMe::Method::SetGroupPin& r)
+BEAM_EXPORT void Method_17(const PriviMe::Method::DeleteGroup& r)
 {
-    // Verify caller
     char callerHandle[PriviMe::s_MaxHandleLen];
     Env::Memset(callerHandle, 0, sizeof(callerHandle));
     Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
 
-    // Load group
     PriviMe::GroupInfo gi;
     Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
 
-    // Must be admin or creator with PinMsg permission
-    PriviMe::MemberInfo callerMi;
-    Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
-    Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Admin && callerMi.m_Role != PriviMe::Role::s_Creator);
-    if (callerMi.m_Role == PriviMe::Role::s_Admin)
-        Env::Halt_if(!(callerMi.m_Permissions & PriviMe::Perm::s_PinMsg));
-
-    if (r.m_Unpin) {
-        // Find and remove pin by message hash
-        for (uint32_t i = 0; i < gi.m_PinCount; i++) {
-            PriviMe::GroupPinKey pk;
-            Env::Memcpy(pk.m_GroupId, r.m_GroupId, 32);
-            pk.m_PinIndex = i;
-            PriviMe::PinInfo pi;
-            if (Env::LoadVar_T(pk, pi)) {
-                if (Env::Memcmp(pi.m_MessageHash, r.m_MessageHash, 32) == 0) {
-                    // Found — delete this pin and shift remaining
-                    Env::DelVar_T(pk);
-
-                    // Move last pin to this slot (swap-remove)
-                    if (i < gi.m_PinCount - 1) {
-                        PriviMe::GroupPinKey lastPk;
-                        Env::Memcpy(lastPk.m_GroupId, r.m_GroupId, 32);
-                        lastPk.m_PinIndex = gi.m_PinCount - 1;
-                        PriviMe::PinInfo lastPi;
-                        if (Env::LoadVar_T(lastPk, lastPi)) {
-                            Env::SaveVar_T(pk, lastPi); // move last to deleted slot
-                            Env::DelVar_T(lastPk);      // delete last
-                        }
-                    }
-
-                    gi.m_PinCount--;
-                    PriviMe::SaveGroup(r.m_GroupId, gi);
-                    break;
-                }
-            }
-        }
-    } else {
-        // Pin: check limit
-        Env::Halt_if(gi.m_PinCount >= PriviMe::s_MaxGroupPins);
-
-        // Add pin at next index
-        PriviMe::GroupPinKey pk;
-        Env::Memcpy(pk.m_GroupId, r.m_GroupId, 32);
-        pk.m_PinIndex = gi.m_PinCount;
-
-        PriviMe::PinInfo pi;
-        _POD_(pi).SetZero();
-        Env::Memcpy(pi.m_SenderHandle, r.m_SenderHandle, PriviMe::s_MaxHandleLen);
-        Env::Memcpy(pi.m_MessageHash, r.m_MessageHash, 32);
-        pi.m_PinnedHeight = (uint32_t)Env::get_Height();
-        Env::SaveVar_T(pk, pi);
-
-        gi.m_PinCount++;
-        PriviMe::SaveGroup(r.m_GroupId, gi);
-    }
-
-    Env::AddSig(r.m_UserPk);
-}
-
-// ============================================================================
-// Method 20: ReportMember
-// ============================================================================
-BEAM_EXPORT void Method_20(const PriviMe::Method::ReportMember& r)
-{
-    // Verify caller
-    char callerHandle[PriviMe::s_MaxHandleLen];
-    Env::Memset(callerHandle, 0, sizeof(callerHandle));
-    Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
-
-    // Load group
-    PriviMe::GroupInfo gi;
-    Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
-
-    // Caller must be a member
-    PriviMe::MemberInfo callerMi;
-    Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, callerHandle, callerMi));
-    Env::Halt_if(callerMi.m_Role == PriviMe::Role::s_Banned);
-
-    // Can't report yourself
-    Env::Halt_if(PriviMe::HandlesMatch(callerHandle, r.m_TargetHandle));
-
-    // Target must be in the group
-    PriviMe::MemberInfo targetMi;
-    Env::Halt_if(!PriviMe::LoadMember(r.m_GroupId, r.m_TargetHandle, targetMi));
-
-    // Valid reason
-    Env::Halt_if(r.m_Reason > 3);
-
-    // Save report (one per reporter-target pair per group)
-    PriviMe::ReportKey rk;
-    Env::Memcpy(rk.m_GroupId, r.m_GroupId, 32);
-    Env::Memcpy(rk.m_Reporter, callerHandle, PriviMe::s_MaxHandleLen);
-    Env::Memcpy(rk.m_Target, r.m_TargetHandle, PriviMe::s_MaxHandleLen);
-
-    PriviMe::ReportInfo ri;
-    ri.m_Reason = r.m_Reason;
-    ri.m_ReportHeight = (uint32_t)Env::get_Height();
-    Env::SaveVar_T(rk, ri);
-
-    Env::AddSig(r.m_UserPk);
-}
-
-// ============================================================================
-// Method 21: DeleteGroup — Creator only
-// ============================================================================
-BEAM_EXPORT void Method_21(const PriviMe::Method::DeleteGroup& r)
-{
-    // Verify caller
-    char callerHandle[PriviMe::s_MaxHandleLen];
-    Env::Memset(callerHandle, 0, sizeof(callerHandle));
-    Env::Halt_if(!PriviMe::GetCallerHandle(r.m_UserPk, callerHandle));
-
-    // Load group
-    PriviMe::GroupInfo gi;
-    Env::Halt_if(!PriviMe::LoadGroup(r.m_GroupId, gi));
-
-    // Only creator can delete
     Env::Halt_if(!PriviMe::HandlesMatch(callerHandle, gi.m_CreatorHandle));
 
-    // Delete group info (Tag 3)
     PriviMe::GroupKey gk;
     Env::Memcpy(gk.m_GroupId, r.m_GroupId, 32);
     Env::DelVar_T(gk);
 
-    // Delete all pins (Tag 6)
-    for (uint32_t i = 0; i < gi.m_PinCount; i++) {
-        PriviMe::GroupPinKey pk;
-        Env::Memcpy(pk.m_GroupId, r.m_GroupId, 32);
-        pk.m_PinIndex = i;
-        Env::DelVar_T(pk);
-    }
-
-    // Note: Member records (Tag 4), join requests (Tag 5), and reports (Tag 7)
-    // are NOT deleted here — would require scanning all handles which is expensive.
+    // Note: Member records (Tag 4) are NOT deleted — would require scanning all handles.
     // They become orphaned but harmless (group_id no longer resolves).
-    // App-level: filter by checking if group exists before displaying.
 
-    // Decrement creator's group count
     uint32_t grpCount = PriviMe::GetGroupCount(callerHandle);
     if (grpCount > 0)
         PriviMe::SetGroupCount(callerHandle, grpCount - 1);
