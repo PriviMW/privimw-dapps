@@ -1,5 +1,5 @@
 // PriviMe App Shader
-// Client-side logic: reads identity registry, generates TX kernels.
+// Client-side logic: reads identity registry + group chat state, generates TX kernels.
 // Upgradable3 admin actions (schedule/apply upgrade) use owner key.
 #include "common.h"
 #include "app_common_impl.h"
@@ -8,8 +8,6 @@
 
 void OnError(const char* sz)
 {
-    // NOTE: Do NOT open a DocGroup here — Method_1 already has root("") open.
-    // Adding one here produces double-wrapped output: {{"error":"..."}}
     Env::DocAddText("error", sz);
 }
 
@@ -17,15 +15,12 @@ void OnError(const char* sz)
 // Key derivation
 // ============================================================================
 
-// Owner key: SID-based so consistent across any future contract redeployment.
-// Seed "privime-owner-ke" (16 bytes of "privime-owner-key").
-// Used for: fee withdrawal (Withdraw/SetOwner/SetConfig).
 struct OwnerKey {
-    uint8_t  m_pSeed[16]; // "privime-owner-ke"
-    ShaderID m_SID;       // First SID ties key to this contract family
+    uint8_t  m_pSeed[16];
+    ShaderID m_SID;
 
     OwnerKey() {
-        const char szSeed[] = "privime-owner-key"; // Memcpy copies first 16 bytes
+        const char szSeed[] = "privime-owner-key";
         Env::Memcpy(m_pSeed, szSeed, sizeof(m_pSeed));
         _POD_(m_SID) = PriviMe::s_pSID[0];
     }
@@ -33,16 +28,13 @@ struct OwnerKey {
     void DerivePk(PubKey& pk) const { Env::DerivePk(pk, this, sizeof(*this)); }
 };
 
-// User key: CID-based, unique per contract instance.
-// Seed "privime-user-key" (16 bytes of "privime-user-key0").
-// Used for: register_handle, update_profile, release_handle.
 struct UserKey {
-    uint8_t    m_pSeed[16]; // "privime-user-key"
+    uint8_t    m_pSeed[16];
     ContractID m_Cid;
 
     UserKey() { _POD_(*this).SetZero(); }
     UserKey(const ContractID& cid) {
-        const char szSeed[] = "privime-user-key0"; // Memcpy copies first 16 bytes
+        const char szSeed[] = "privime-user-key0";
         Env::Memcpy(m_pSeed, szSeed, sizeof(m_pSeed));
         _POD_(m_Cid) = cid;
     }
@@ -51,7 +43,7 @@ struct UserKey {
 };
 
 // ============================================================================
-// Upgradable3 version info
+// Helpers
 // ============================================================================
 
 static Upgradable3::Manager::VerInfo GetVerInfo()
@@ -62,17 +54,23 @@ static Upgradable3::Manager::VerInfo GetVerInfo()
     return vi;
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
-
-// Output a Profile's WalletID as hex string (68 hex chars = 34 bytes)
 void DocAddWalletId(const char* szKey, const uint8_t* raw34)
 {
     Env::DocAddBlob(szKey, raw34, 34);
 }
 
-// Read contract state — halts on error
+void DocAddGroupId(const char* szKey, const uint8_t* id32)
+{
+    Env::DocAddBlob(szKey, id32, 32);
+}
+
+bool IsZero32(const uint8_t* p)
+{
+    for (uint32_t i = 0; i < 32; i++)
+        if (p[i] != 0) return false;
+    return true;
+}
+
 bool ReadState(const ContractID& cid, PriviMe::State& s)
 {
     Env::Key_T<PriviMe::StateKey> k;
@@ -81,6 +79,36 @@ bool ReadState(const ContractID& cid, PriviMe::State& s)
         OnError("failed to read contract state");
         return false;
     }
+    return true;
+}
+
+// Read group_id from doc args (64 hex chars = 32 bytes)
+bool DocGetGroupId(uint8_t* groupId)
+{
+    if (Env::DocGetBlob("group_id", groupId, 32) != 32) {
+        OnError("group_id must be 32 bytes");
+        return false;
+    }
+    return true;
+}
+
+// Read target handle from doc args
+bool DocGetTargetHandle(char* handle)
+{
+    Env::Memset(handle, 0, PriviMe::s_MaxHandleLen);
+    char buf[PriviMe::s_MaxHandleLen + 1];
+    Env::Memset(buf, 0, sizeof(buf));
+    if (!Env::DocGetText("target_handle", buf, sizeof(buf))) {
+        OnError("target_handle required");
+        return false;
+    }
+    // Normalize to lowercase
+    for (uint32_t i = 0; i < PriviMe::s_MaxHandleLen && buf[i]; i++) {
+        char c = buf[i];
+        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+        buf[i] = c;
+    }
+    Env::Memcpy(handle, buf, PriviMe::s_MaxHandleLen);
     return true;
 }
 
@@ -94,12 +122,8 @@ BEAM_EXPORT void Method_0()
         Env::DocGroup gr("roles");
         {
             Env::DocGroup grRole("manager");
-            {
-                Env::DocGroup grM("create_contract");
-            }
-            {
-                Env::DocGroup grM("view_contracts");
-            }
+            {   Env::DocGroup grM("create_contract"); }
+            {   Env::DocGroup grM("view_contracts"); }
             {
                 Env::DocGroup grM("view_pool");
                 Env::DocAddText("cid", "ContractID");
@@ -152,12 +176,11 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("iSender", "uint32");
                 Env::DocAddText("approve_mask", "uint32");
             }
-            {
-                Env::DocGroup grM("view_contract_info");
-            }
+            {   Env::DocGroup grM("view_contract_info"); }
         }
         {
             Env::DocGroup grRole("user");
+            // Identity
             {
                 Env::DocGroup grM("my_handle");
                 Env::DocAddText("cid", "ContractID");
@@ -180,11 +203,6 @@ BEAM_EXPORT void Method_0()
                 Env::DocAddText("cid", "ContractID");
             }
             {
-                Env::DocGroup grM("set_avatar");
-                Env::DocAddText("cid", "ContractID");
-                Env::DocAddText("avatar_hash", "string");
-            }
-            {
                 Env::DocGroup grM("resolve_handle");
                 Env::DocAddText("cid", "ContractID");
                 Env::DocAddText("handle", "string");
@@ -203,28 +221,140 @@ BEAM_EXPORT void Method_0()
                 Env::DocGroup grM("view_recent");
                 Env::DocAddText("cid", "ContractID");
             }
+            // Groups
+            {
+                Env::DocGroup grM("create_group");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("name", "string");
+                Env::DocAddText("is_public", "uint32");
+                Env::DocAddText("require_approval", "uint32");
+                Env::DocAddText("max_members", "uint32");
+                Env::DocAddText("default_permissions", "uint32");
+            }
+            {
+                Env::DocGroup grM("join_group");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("invite_secret", "hex32");
+            }
+            {
+                Env::DocGroup grM("remove_member");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("target_handle", "string");
+                Env::DocAddText("ban", "uint32");
+            }
+            {
+                Env::DocGroup grM("set_member_role");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("target_handle", "string");
+                Env::DocAddText("new_role", "uint32");
+                Env::DocAddText("permissions", "uint32");
+            }
+            {
+                Env::DocGroup grM("update_group_info");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("name", "string");
+                Env::DocAddText("is_public", "uint32");
+                Env::DocAddText("require_approval", "uint32");
+                Env::DocAddText("default_permissions", "uint32");
+            }
+            {
+                Env::DocGroup grM("leave_group");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
+            {
+                Env::DocGroup grM("approve_join_request");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("target_handle", "string");
+                Env::DocAddText("approve", "uint32");
+            }
+            {
+                Env::DocGroup grM("set_invite_link");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("invite_hash", "hex32");
+                Env::DocAddText("expiry_height", "uint32");
+            }
+            {
+                Env::DocGroup grM("transfer_ownership");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("new_creator", "string");
+            }
+            {
+                Env::DocGroup grM("set_group_pin");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("sender_handle", "string");
+                Env::DocAddText("message_hash", "hex32");
+                Env::DocAddText("unpin", "uint32");
+            }
+            {
+                Env::DocGroup grM("report_member");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+                Env::DocAddText("target_handle", "string");
+                Env::DocAddText("reason", "uint32");
+            }
+            {
+                Env::DocGroup grM("delete_group");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
+            // Group views
+            {
+                Env::DocGroup grM("view_group");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
+            {
+                Env::DocGroup grM("list_members");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
+            {
+                Env::DocGroup grM("list_my_groups");
+                Env::DocAddText("cid", "ContractID");
+            }
+            {
+                Env::DocGroup grM("search_groups");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("prefix", "string");
+            }
+            {
+                Env::DocGroup grM("view_join_requests");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
+            {
+                Env::DocGroup grM("view_group_pins");
+                Env::DocAddText("cid", "ContractID");
+                Env::DocAddText("group_id", "hex32");
+            }
         }
     }
 }
 
 // ============================================================================
-// Manager handlers
+// Manager handlers (unchanged from v2)
 // ============================================================================
 
-void On_create_contract(const ContractID& /*cid*/)
+void On_create_contract(const ContractID&)
 {
     PriviMe::Method::Ctor args;
     _POD_(args).SetZero();
-
-    // Single admin: derived from OwnerKey. Upgrade delay = 0 (instant) for DAppNet.
     args.m_Upgradable.m_MinApprovers = 1;
     args.m_Upgradable.m_hMinUpgradeDelay = 0;
 
     OwnerKey ok;
-    ok.DerivePk(args.m_Upgradable.m_pAdmin[0]); // admin key = owner key
-    ok.DerivePk(args.m_OwnerPk);                 // fee withdrawal key = same
+    ok.DerivePk(args.m_Upgradable.m_pAdmin[0]);
+    ok.DerivePk(args.m_OwnerPk);
 
-    // Higher nCharge: Upgradable3::Settings (1036 bytes) + contract.wasm + PriviMe state = large initial deploy
     Env::GenerateKernel(nullptr, 0, &args, sizeof(args), nullptr, 0, nullptr, 0,
                         "create PriviMe contract", 1000000);
 }
@@ -251,13 +381,12 @@ void On_withdraw(const ContractID& cid)
     if (!ReadState(cid, s)) return;
 
     FundsChange fc;
-    fc.m_Aid     = s.m_AssetId;
-    fc.m_Amount  = args.m_Amount;
+    fc.m_Aid = s.m_AssetId;
+    fc.m_Amount = args.m_Amount;
     fc.m_Consume = 0;
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     Env::GenerateKernel(&cid, PriviMe::Method::Withdraw::s_iMethod, &args, sizeof(args),
                         &fc, 1, &kid, 1, "PriviMe: withdraw", 75000);
 }
@@ -269,7 +398,6 @@ void On_set_owner(const ContractID& cid)
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     Env::GenerateKernel(&cid, PriviMe::Method::SetOwner::s_iMethod, &args, sizeof(args),
                         nullptr, 0, &kid, 1, "PriviMe: set owner", 70000);
 }
@@ -286,7 +414,6 @@ void On_set_config(const ContractID& cid)
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     Env::GenerateKernel(&cid, PriviMe::Method::SetConfig::s_iMethod, &args, sizeof(args),
                         nullptr, 0, &kid, 1, "PriviMe: set config", 70000);
 }
@@ -305,7 +432,6 @@ void On_view_all(const ContractID& cid)
         Env::DocAddNum("paused", (uint32_t)s.m_Paused);
     }
 
-    // Range scan all HandleKey entries
     Env::Key_T<PriviMe::HandleKey> k0, k1;
     _POD_(k0.m_Prefix.m_Cid) = cid;
     _POD_(k0.m_KeyInContract).SetZero();
@@ -317,34 +443,27 @@ void On_view_all(const ContractID& cid)
 
     Env::DocArray gr("handles");
     uint32_t count = 0;
-    {
-        Env::VarReader scanner(k0, k1);
-        Env::Key_T<PriviMe::HandleKey> key;
-        PriviMe::Profile p;
-        while (scanner.MoveNext_T(key, p) && count < 100)
-        {
-            Env::DocGroup entry("");
-            Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
-            DocAddWalletId("wallet_id", p.m_WalletIdRaw);
-            Env::DocAddNum("registered_height", p.m_RegisteredHeight);
-            if (p.m_DisplayName[0])
-                Env::DocAddText("display_name", p.m_DisplayName);
-            count++;
-        }
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::HandleKey> key;
+    PriviMe::Profile p;
+    while (scanner.MoveNext_T(key, p) && count < 100) {
+        Env::DocGroup entry("");
+        Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
+        DocAddWalletId("wallet_id", p.m_WalletIdRaw);
+        Env::DocAddNum("registered_height", p.m_RegisteredHeight);
+        if (p.m_DisplayName[0])
+            Env::DocAddText("display_name", p.m_DisplayName);
+        count++;
     }
 }
 
-// List all deployed PriviMe contracts (scans ALL known SIDs)
-void On_view_contracts(const ContractID& /*cid*/)
+void On_view_contracts(const ContractID&)
 {
     Env::DocArray gr("contracts");
-
     static const uint32_t nVersions = sizeof(PriviMe::s_pSID) / sizeof(PriviMe::s_pSID[0]);
-    for (uint32_t v = 0; v < nVersions; v++)
-    {
+    for (uint32_t v = 0; v < nVersions; v++) {
         WalkerContracts wlk;
-        for (wlk.Enum(PriviMe::s_pSID[v]); wlk.MoveNext(); )
-        {
+        for (wlk.Enum(PriviMe::s_pSID[v]); wlk.MoveNext(); ) {
             Env::DocGroup entry("");
             Env::DocAddBlob_T("cid", wlk.m_Key.m_KeyInContract.m_Cid);
             Env::DocAddNum("height", wlk.m_Height);
@@ -353,28 +472,20 @@ void On_view_contracts(const ContractID& /*cid*/)
     }
 }
 
-// Trigger a pre-scheduled contract upgrade (anyone can call after delay)
-void On_explicit_upgrade(const ContractID& cid)
-{
-    Upgradable3::Manager::MultiSigRitual::Perform_ExplicitUpgrade(cid);
-}
+void On_explicit_upgrade(const ContractID& cid) { Upgradable3::Manager::MultiSigRitual::Perform_ExplicitUpgrade(cid); }
 
-// Schedule a contract upgrade (admin only, requires --shader_contract_file)
 void On_schedule_upgrade(const ContractID& cid)
 {
     Height hTarget = 0;
     Env::DocGet("hTarget", hTarget);
-    if (!hTarget)
-        return OnError("hTarget required");
+    if (!hTarget) return OnError("hTarget required");
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     auto vi = GetVerInfo();
     Upgradable3::Manager::MultiSigRitual::Perform_ScheduleUpgrade(vi, cid, kid, hTarget);
 }
 
-// Replace an admin key (admin only)
 void On_replace_admin(const ContractID& cid)
 {
     uint32_t iAdmin = 0;
@@ -384,39 +495,32 @@ void On_replace_admin(const ContractID& cid)
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     Upgradable3::Manager::MultiSigRitual::Perform_ReplaceAdmin(cid, kid, iAdmin, pk);
 }
 
-// Change minimum number of admin approvers (admin only)
 void On_set_approvers(const ContractID& cid)
 {
     uint32_t newVal = 0;
     Env::DocGet("newVal", newVal);
-    if (!newVal)
-        return OnError("newVal required");
+    if (!newVal) return OnError("newVal required");
 
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     Upgradable3::Manager::MultiSigRitual::Perform_SetApprovers(cid, kid, newVal);
 }
 
-// Dump contract info: version, admins, scheduled upgrades (view only)
-void On_view_contract_info(const ContractID& /*cid*/)
+void On_view_contract_info(const ContractID&)
 {
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
-
     auto vi = GetVerInfo();
     vi.DumpAll(&kid);
 }
 
 // ============================================================================
-// User handlers
+// User handlers — Identity
 // ============================================================================
 
-// Returns { registered: 1, handle, display_name, wallet_id } or { registered: 0 }
 void On_my_handle(const ContractID& cid)
 {
     UserKey uk(cid);
@@ -434,13 +538,11 @@ void On_my_handle(const ContractID& cid)
         return;
     }
 
-    // Load the profile to get WalletID
     Env::Key_T<PriviMe::HandleKey> hk;
     _POD_(hk.m_Prefix.m_Cid) = cid;
     hk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
     Env::Memset(hk.m_KeyInContract.m_Handle, 0, sizeof(hk.m_KeyInContract.m_Handle));
-    Env::Memcpy(hk.m_KeyInContract.m_Handle, ownerRec.m_Handle,
-                PriviMe::s_MaxHandleLen);
+    Env::Memcpy(hk.m_KeyInContract.m_Handle, ownerRec.m_Handle, PriviMe::s_MaxHandleLen);
 
     PriviMe::Profile profile;
     if (!Env::VarReader::Read_T(hk, profile)) {
@@ -454,106 +556,57 @@ void On_my_handle(const ContractID& cid)
     if (profile.m_DisplayName[0])
         Env::DocAddText("display_name", profile.m_DisplayName);
     Env::DocAddNum("registered_height", profile.m_RegisteredHeight);
-
-    // Avatar hash lookup
-    Env::Key_T<PriviMe::AvatarKey> avk;
-    _POD_(avk.m_Prefix.m_Cid) = cid;
-    avk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
-    Env::Memset(avk.m_KeyInContract.m_Handle, 0, sizeof(avk.m_KeyInContract.m_Handle));
-    Env::Memcpy(avk.m_KeyInContract.m_Handle, ownerRec.m_Handle, PriviMe::s_MaxHandleLen);
-    PriviMe::AvatarData avd;
-    if (Env::VarReader::Read_T(avk, avd))
-        Env::DocAddBlob_T("avatar_hash", avd.m_Hash);
 }
 
-// Claim @handle: generates a TX kernel for Method_3 (RegisterHandle)
 void On_register_handle(const ContractID& cid)
 {
     PriviMe::Method::RegisterHandle args;
     _POD_(args).SetZero();
 
-    // Read and normalize handle to lowercase
     char szHandle[PriviMe::s_MaxHandleLen + 1];
     Env::Memset(szHandle, 0, sizeof(szHandle));
-    if (!Env::DocGetText("handle", szHandle, sizeof(szHandle))) {
+    if (!Env::DocGetText("handle", szHandle, sizeof(szHandle)))
         return OnError("handle required");
-    }
-    // Normalize to lowercase
+
     for (uint32_t i = 0; i < sizeof(szHandle) - 1 && szHandle[i]; i++) {
         char c = szHandle[i];
         if (c >= 'A' && c <= 'Z') szHandle[i] = c - 'A' + 'a';
     }
     Env::Memcpy(args.m_Handle, szHandle, PriviMe::s_MaxHandleLen);
 
-    // Read display name (optional)
     Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
 
-    // Read WalletID as 34-byte blob (68 hex chars in JSON)
     if (Env::DocGetBlob("wallet_id", args.m_WalletIdRaw, sizeof(args.m_WalletIdRaw))
-        != sizeof(args.m_WalletIdRaw)) {
+        != sizeof(args.m_WalletIdRaw))
         return OnError("wallet_id must be 34 bytes");
-    }
 
-    // Read avatar hash (optional, 64 hex chars)
-    {
-        char szHash[65];
-        Env::Memset(szHash, 0, sizeof(szHash));
-        if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
-            for (uint32_t i = 0; i < 32; i++) {
-                uint8_t hi = 0, lo = 0;
-                char ch = szHash[i * 2], cl = szHash[i * 2 + 1];
-                if (ch >= '0' && ch <= '9') hi = ch - '0'; else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
-                if (cl >= '0' && cl <= '9') lo = cl - '0'; else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
-                args.m_AvatarHash[i] = (hi << 4) | lo;
-            }
-        }
-    }
-
-    // Read state to get asset ID and fee
     PriviMe::State s;
     if (!ReadState(cid, s)) return;
     args.m_AssetId = s.m_AssetId;
 
-    // Derive user key for this contract
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);
     Env::KeyID kid(&uk, sizeof(uk));
 
     FundsChange fc;
-    fc.m_Aid     = s.m_AssetId;
-    fc.m_Amount  = s.m_RegistrationFee;
+    fc.m_Aid = s.m_AssetId;
+    fc.m_Amount = s.m_RegistrationFee;
     fc.m_Consume = 1;
 
     Env::GenerateKernel(&cid, PriviMe::Method::RegisterHandle::s_iMethod, &args, sizeof(args),
                         &fc, 1, &kid, 1, "PriviMe: register handle", 200000);
 }
 
-// Update WalletID and/or display name: generates TX for Method_4 (UpdateProfile)
 void On_update_profile(const ContractID& cid)
 {
     PriviMe::Method::UpdateProfile args;
     _POD_(args).SetZero();
 
     if (Env::DocGetBlob("wallet_id", args.m_WalletIdRaw, sizeof(args.m_WalletIdRaw))
-        != sizeof(args.m_WalletIdRaw)) {
+        != sizeof(args.m_WalletIdRaw))
         return OnError("wallet_id must be 34 bytes");
-    }
-    Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
 
-    // Read avatar hash (optional, 64 hex chars)
-    {
-        char szHash[65];
-        Env::Memset(szHash, 0, sizeof(szHash));
-        if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
-            for (uint32_t i = 0; i < 32; i++) {
-                uint8_t hi = 0, lo = 0;
-                char ch = szHash[i * 2], cl = szHash[i * 2 + 1];
-                if (ch >= '0' && ch <= '9') hi = ch - '0'; else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
-                if (cl >= '0' && cl <= '9') lo = cl - '0'; else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
-                args.m_AvatarHash[i] = (hi << 4) | lo;
-            }
-        }
-    }
+    Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
 
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);
@@ -563,7 +616,6 @@ void On_update_profile(const ContractID& cid)
                         nullptr, 0, &kid, 1, "PriviMe: update profile", 150000);
 }
 
-// Give up @handle: generates TX for Method_5 (ReleaseHandle)
 void On_release_handle(const ContractID& cid)
 {
     PriviMe::Method::ReleaseHandle args;
@@ -576,41 +628,6 @@ void On_release_handle(const ContractID& cid)
                         nullptr, 0, &kid, 1, "PriviMe: release handle", 130000);
 }
 
-// Set or clear avatar hash (generates TX kernel for Method_10)
-void On_set_avatar(const ContractID& cid)
-{
-    PriviMe::Method::SetAvatar args;
-    _POD_(args).SetZero();
-
-    UserKey uk(cid);
-    uk.DerivePk(args.m_UserPk);
-
-    // Read avatar_hash (hex string, 64 chars = 32 bytes)
-    char szHash[65];
-    Env::Memset(szHash, 0, sizeof(szHash));
-    if (Env::DocGetText("avatar_hash", szHash, sizeof(szHash))) {
-        // Parse hex string to bytes
-        for (uint32_t i = 0; i < 32; i++) {
-            uint8_t hi = 0, lo = 0;
-            char ch = szHash[i * 2];
-            char cl = szHash[i * 2 + 1];
-            if (ch >= '0' && ch <= '9') hi = ch - '0';
-            else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
-            else if (ch >= 'A' && ch <= 'F') hi = ch - 'A' + 10;
-            if (cl >= '0' && cl <= '9') lo = cl - '0';
-            else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
-            else if (cl >= 'A' && cl <= 'F') lo = cl - 'A' + 10;
-            args.m_Hash[i] = (hi << 4) | lo;
-        }
-    }
-    // If no avatar_hash provided, m_Hash stays all-zero → clears avatar
-
-    Env::KeyID kid(&uk, sizeof(uk));
-    Env::GenerateKernel(&cid, PriviMe::Method::SetAvatar::s_iMethod, &args, sizeof(args),
-                        nullptr, 0, &kid, 1, "PriviMe: set avatar", 130000);
-}
-
-// Resolve @handle -> WalletID + display_name (view only, no TX)
 void On_resolve_handle(const ContractID& cid)
 {
     char szHandle[PriviMe::s_MaxHandleLen + 1];
@@ -618,7 +635,6 @@ void On_resolve_handle(const ContractID& cid)
     if (!Env::DocGetText("handle", szHandle, sizeof(szHandle)))
         return OnError("handle required");
 
-    // Normalize to lowercase
     for (uint32_t i = 0; i < sizeof(szHandle) - 1 && szHandle[i]; i++) {
         char c = szHandle[i];
         if (c >= 'A' && c <= 'Z') szHandle[i] = c - 'A' + 'a';
@@ -638,19 +654,8 @@ void On_resolve_handle(const ContractID& cid)
     Env::DocAddNum("registered_height", profile.m_RegisteredHeight);
     if (profile.m_DisplayName[0])
         Env::DocAddText("display_name", profile.m_DisplayName);
-
-    // Look up avatar hash (tag=3)
-    Env::Key_T<PriviMe::AvatarKey> ak;
-    _POD_(ak.m_Prefix.m_Cid) = cid;
-    ak.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
-    Env::Memset(ak.m_KeyInContract.m_Handle, 0, sizeof(ak.m_KeyInContract.m_Handle));
-    Env::Memcpy(ak.m_KeyInContract.m_Handle, szHandle, PriviMe::s_MaxHandleLen);
-    PriviMe::AvatarData avatarData;
-    if (Env::VarReader::Read_T(ak, avatarData))
-        Env::DocAddBlob_T("avatar_hash", avatarData.m_Hash);
 }
 
-// Prefix search: returns all handles starting with the given prefix (max 20 results)
 void On_search_handles(const ContractID& cid)
 {
     char szPrefix[PriviMe::s_MaxHandleLen + 1];
@@ -658,7 +663,6 @@ void On_search_handles(const ContractID& cid)
     if (!Env::DocGetText("prefix", szPrefix, sizeof(szPrefix)))
         return OnError("prefix required");
 
-    // Normalize to lowercase
     uint32_t prefixLen = 0;
     for (uint32_t i = 0; i < PriviMe::s_MaxHandleLen && szPrefix[i]; i++) {
         char c = szPrefix[i];
@@ -668,7 +672,6 @@ void On_search_handles(const ContractID& cid)
     }
     if (prefixLen == 0) return OnError("prefix empty");
 
-    // Build key range: k0 = prefix padded with 0x00, k1 = prefix padded with 0xFF
     Env::Key_T<PriviMe::HandleKey> k0, k1;
     _POD_(k0.m_Prefix.m_Cid) = cid;
     k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
@@ -679,7 +682,6 @@ void On_search_handles(const ContractID& cid)
     k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
     Env::Memset(k1.m_KeyInContract.m_Handle, 0, sizeof(k1.m_KeyInContract.m_Handle));
     Env::Memcpy(k1.m_KeyInContract.m_Handle, szPrefix, prefixLen);
-    // Fill remaining bytes after prefix with 0xFF to create upper bound
     for (uint32_t i = prefixLen; i < PriviMe::s_MaxHandleLen; i++)
         k1.m_KeyInContract.m_Handle[i] = (char)0xFF;
 
@@ -688,36 +690,23 @@ void On_search_handles(const ContractID& cid)
     Env::VarReader scanner(k0, k1);
     Env::Key_T<PriviMe::HandleKey> key;
     PriviMe::Profile p;
-
-    while (scanner.MoveNext_T(key, p) && count < 20)
-    {
+    while (scanner.MoveNext_T(key, p) && count < 20) {
         Env::DocGroup entry("");
         Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
         DocAddWalletId("wallet_id", p.m_WalletIdRaw);
         Env::DocAddNum("registered_height", p.m_RegisteredHeight);
         if (p.m_DisplayName[0])
             Env::DocAddText("display_name", p.m_DisplayName);
-        // Avatar hash lookup
-        Env::Key_T<PriviMe::AvatarKey> avk;
-        _POD_(avk.m_Prefix.m_Cid) = cid;
-        avk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Avatar;
-        Env::Memcpy(avk.m_KeyInContract.m_Handle, key.m_KeyInContract.m_Handle, sizeof(avk.m_KeyInContract.m_Handle));
-        PriviMe::AvatarData avd;
-        if (Env::VarReader::Read_T(avk, avd))
-            Env::DocAddBlob_T("avatar_hash", avd.m_Hash);
         count++;
     }
 }
 
-// Reverse lookup: WalletID -> @handle + display_name (O(n) scan — acceptable for v1)
-// Used by UI to show @handle next to incoming messages (sender is a WalletID)
 void On_resolve_walletid(const ContractID& cid)
 {
     uint8_t targetId[34];
     if (Env::DocGetBlob("walletid", targetId, sizeof(targetId)) != sizeof(targetId))
         return OnError("walletid must be 34 bytes");
 
-    // Scan all HandleKey entries, compare profile.m_WalletIdRaw
     Env::Key_T<PriviMe::HandleKey> k0, k1;
     _POD_(k0.m_Prefix.m_Cid) = cid;
     _POD_(k0.m_KeyInContract).SetZero();
@@ -730,48 +719,38 @@ void On_resolve_walletid(const ContractID& cid)
     Env::VarReader scanner(k0, k1);
     Env::Key_T<PriviMe::HandleKey> key;
     PriviMe::Profile p;
-
-    while (scanner.MoveNext_T(key, p))
-    {
-        // Compare raw WalletID bytes
+    while (scanner.MoveNext_T(key, p)) {
         bool match = true;
         for (uint32_t i = 0; i < sizeof(targetId); i++) {
             if (p.m_WalletIdRaw[i] != targetId[i]) { match = false; break; }
         }
         if (!match) continue;
 
-        // Found
         Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
         if (p.m_DisplayName[0])
             Env::DocAddText("display_name", p.m_DisplayName);
         Env::DocAddNum("registered_height", p.m_RegisteredHeight);
         return;
     }
-
     OnError("wallet ID not found");
 }
 
-// Returns last 20 registered handles sorted by registered_height (most recent first)
 void On_view_recent(const ContractID& cid)
 {
-    // Compact slot for circular buffer
     struct Slot {
-        char     handle[PriviMe::s_MaxHandleLen];
-        char     display_name[PriviMe::s_MaxDisplayNameLen];
-        uint8_t  wallet_id[34];
+        char handle[PriviMe::s_MaxHandleLen];
+        char display_name[PriviMe::s_MaxDisplayNameLen];
+        uint8_t wallet_id[34];
         uint64_t registered_height;
     };
-
     static const uint32_t MAX_RECENT = 20;
-    Slot* buf = (Slot*) Env::Heap_Alloc(sizeof(Slot) * MAX_RECENT);
+    Slot* buf = (Slot*)Env::Heap_Alloc(sizeof(Slot) * MAX_RECENT);
     uint32_t count = 0, write = 0;
 
-    // Scan all handles into circular buffer (last 20 by registered_height)
     Env::Key_T<PriviMe::HandleKey> k0, k1;
     _POD_(k0.m_Prefix.m_Cid) = cid;
     _POD_(k0.m_KeyInContract).SetZero();
     k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
-
     _POD_(k1.m_Prefix.m_Cid) = cid;
     Env::Memset(&k1.m_KeyInContract, 0xFF, sizeof(k1.m_KeyInContract));
     k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Handle;
@@ -780,8 +759,7 @@ void On_view_recent(const ContractID& cid)
         Env::VarReader scanner(k0, k1);
         Env::Key_T<PriviMe::HandleKey> key;
         PriviMe::Profile p;
-        while (scanner.MoveNext_T(key, p))
-        {
+        while (scanner.MoveNext_T(key, p)) {
             Slot& s = buf[write];
             Env::Memcpy(s.handle, key.m_KeyInContract.m_Handle, sizeof(s.handle));
             Env::Memcpy(s.display_name, p.m_DisplayName, sizeof(s.display_name));
@@ -792,10 +770,8 @@ void On_view_recent(const ContractID& cid)
         }
     }
 
-    // Output newest first
     Env::DocArray gr("recent");
-    for (uint32_t i = 0; i < count; i++)
-    {
+    for (uint32_t i = 0; i < count; i++) {
         uint32_t idx = (write + MAX_RECENT - 1 - i) % MAX_RECENT;
         Slot& s = buf[idx];
         Env::DocGroup entry("");
@@ -805,8 +781,521 @@ void On_view_recent(const ContractID& cid)
         if (s.display_name[0])
             Env::DocAddText("display_name", s.display_name);
     }
-
     Env::Heap_Free(buf);
+}
+
+// ============================================================================
+// User handlers — Group TX actions
+// ============================================================================
+
+void On_create_group(const ContractID& cid)
+{
+    PriviMe::Method::CreateGroup args;
+    _POD_(args).SetZero();
+
+    char szName[PriviMe::s_MaxGroupNameLen + 1];
+    Env::Memset(szName, 0, sizeof(szName));
+    if (!Env::DocGetText("name", szName, sizeof(szName)))
+        return OnError("name required");
+    Env::Memcpy(args.m_Name, szName, PriviMe::s_MaxGroupNameLen);
+
+    uint32_t isPublic = 0, requireApproval = 0;
+    Env::DocGet("is_public", isPublic);
+    Env::DocGet("require_approval", requireApproval);
+    args.m_IsPublic = (uint8_t)isPublic;
+    args.m_RequireApproval = (uint8_t)requireApproval;
+
+    Env::DocGet("max_members", args.m_MaxMembers);
+    Env::DocGet("default_permissions", args.m_DefaultPermissions);
+
+    // Generate nonce from current height for unique group_id
+    Height h = Env::get_Height();
+    args.m_Nonce = (uint32_t)(h ^ 0xDEADBEEF);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::CreateGroup::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: create group", 250000);
+}
+
+void On_join_group(const ContractID& cid)
+{
+    PriviMe::Method::JoinGroup args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    // Optional invite secret (for private groups)
+    Env::DocGetBlob("invite_secret", args.m_InviteSecret, 32);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::JoinGroup::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: join group", 200000);
+}
+
+void On_remove_member(const ContractID& cid)
+{
+    PriviMe::Method::RemoveMember args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
+
+    uint32_t ban = 0;
+    Env::DocGet("ban", ban);
+    args.m_Ban = (uint8_t)ban;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::RemoveMember::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: remove member", 200000);
+}
+
+void On_set_member_role(const ContractID& cid)
+{
+    PriviMe::Method::SetMemberRole args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
+
+    uint32_t newRole = 0;
+    Env::DocGet("new_role", newRole);
+    args.m_NewRole = (uint8_t)newRole;
+
+    Env::DocGet("permissions", args.m_Permissions);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::SetMemberRole::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: set member role", 200000);
+}
+
+void On_update_group_info(const ContractID& cid)
+{
+    PriviMe::Method::UpdateGroupInfo args;
+    _POD_(args).SetZero();
+    args.m_IsPublic = 0xFF;         // no change sentinel
+    args.m_RequireApproval = 0xFF;   // no change sentinel
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    char szName[PriviMe::s_MaxGroupNameLen + 1];
+    Env::Memset(szName, 0, sizeof(szName));
+    if (Env::DocGetText("name", szName, sizeof(szName)))
+        Env::Memcpy(args.m_Name, szName, PriviMe::s_MaxGroupNameLen);
+
+    uint32_t isPublic = 0xFF, requireApproval = 0xFF;
+    if (Env::DocGet("is_public", isPublic))
+        args.m_IsPublic = (uint8_t)isPublic;
+    if (Env::DocGet("require_approval", requireApproval))
+        args.m_RequireApproval = (uint8_t)requireApproval;
+
+    Env::DocGet("default_permissions", args.m_DefaultPermissions);
+
+    // Description hash and avatar hash can be passed as blobs
+    Env::DocGetBlob("description_hash", args.m_DescriptionHash, 32);
+    Env::DocGetBlob("avatar_hash", args.m_AvatarHash, 32);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::UpdateGroupInfo::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: update group info", 200000);
+}
+
+void On_leave_group(const ContractID& cid)
+{
+    PriviMe::Method::LeaveGroup args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::LeaveGroup::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: leave group", 150000);
+}
+
+void On_approve_join_request(const ContractID& cid)
+{
+    PriviMe::Method::ApproveJoinRequest args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
+
+    uint32_t approve = 1;
+    Env::DocGet("approve", approve);
+    args.m_Approve = (uint8_t)approve;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::ApproveJoinRequest::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: approve join request", 200000);
+}
+
+void On_set_invite_link(const ContractID& cid)
+{
+    PriviMe::Method::SetInviteLink args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    Env::DocGetBlob("invite_hash", args.m_InviteHash, 32);
+    Env::DocGet("expiry_height", args.m_ExpiryHeight);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::SetInviteLink::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: set invite link", 150000);
+}
+
+void On_transfer_ownership(const ContractID& cid)
+{
+    PriviMe::Method::TransferOwnership args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    char szHandle[PriviMe::s_MaxHandleLen + 1];
+    Env::Memset(szHandle, 0, sizeof(szHandle));
+    if (!Env::DocGetText("new_creator", szHandle, sizeof(szHandle)))
+        return OnError("new_creator required");
+    for (uint32_t i = 0; i < sizeof(szHandle) - 1 && szHandle[i]; i++) {
+        char c = szHandle[i];
+        if (c >= 'A' && c <= 'Z') szHandle[i] = c - 'A' + 'a';
+    }
+    Env::Memcpy(args.m_NewCreatorHandle, szHandle, PriviMe::s_MaxHandleLen);
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::TransferOwnership::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: transfer ownership", 200000);
+}
+
+void On_set_group_pin(const ContractID& cid)
+{
+    PriviMe::Method::SetGroupPin args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    char szSender[PriviMe::s_MaxHandleLen + 1];
+    Env::Memset(szSender, 0, sizeof(szSender));
+    Env::DocGetText("sender_handle", szSender, sizeof(szSender));
+    Env::Memcpy(args.m_SenderHandle, szSender, PriviMe::s_MaxHandleLen);
+
+    Env::DocGetBlob("message_hash", args.m_MessageHash, 32);
+
+    uint32_t unpin = 0;
+    Env::DocGet("unpin", unpin);
+    args.m_Unpin = (uint8_t)unpin;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::SetGroupPin::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: set group pin", 250000);
+}
+
+void On_report_member(const ContractID& cid)
+{
+    PriviMe::Method::ReportMember args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+    if (!DocGetTargetHandle(args.m_TargetHandle)) return;
+
+    uint32_t reason = 0;
+    Env::DocGet("reason", reason);
+    args.m_Reason = (uint8_t)reason;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::ReportMember::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: report member", 150000);
+}
+
+void On_delete_group(const ContractID& cid)
+{
+    PriviMe::Method::DeleteGroup args;
+    _POD_(args).SetZero();
+
+    if (!DocGetGroupId(args.m_GroupId)) return;
+
+    UserKey uk(cid);
+    uk.DerivePk(args.m_UserPk);
+    Env::KeyID kid(&uk, sizeof(uk));
+
+    Env::GenerateKernel(&cid, PriviMe::Method::DeleteGroup::s_iMethod, &args, sizeof(args),
+                        nullptr, 0, &kid, 1, "PriviMe: delete group", 300000);
+}
+
+// ============================================================================
+// User handlers — Group view actions
+// ============================================================================
+
+void On_view_group(const ContractID& cid)
+{
+    uint8_t groupId[32];
+    if (!DocGetGroupId(groupId)) return;
+
+    Env::Key_T<PriviMe::GroupKey> gk;
+    _POD_(gk.m_Prefix.m_Cid) = cid;
+    gk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
+    Env::Memcpy(gk.m_KeyInContract.m_GroupId, groupId, 32);
+
+    PriviMe::GroupInfo gi;
+    if (!Env::VarReader::Read_T(gk, gi))
+        return OnError("group not found");
+
+    DocAddGroupId("group_id", groupId);
+    Env::DocAddText("name", gi.m_Name);
+    Env::DocAddText("creator", gi.m_CreatorHandle);
+    Env::DocAddNum("is_public", (uint32_t)gi.m_IsPublic);
+    Env::DocAddNum("require_approval", (uint32_t)gi.m_RequireApproval);
+    Env::DocAddNum("max_members", gi.m_MaxMembers);
+    Env::DocAddNum("member_count", gi.m_MemberCount);
+    Env::DocAddNum("default_permissions", gi.m_DefaultPermissions);
+    Env::DocAddNum("created_height", gi.m_CreatedHeight);
+    Env::DocAddNum("pin_count", gi.m_PinCount);
+    Env::DocAddNum("invite_expiry_height", gi.m_InviteExpiryHeight);
+
+    if (!IsZero32(gi.m_DescriptionHash))
+        DocAddGroupId("description_hash", gi.m_DescriptionHash);
+    if (!IsZero32(gi.m_AvatarHash))
+        DocAddGroupId("avatar_hash", gi.m_AvatarHash);
+}
+
+void On_list_members(const ContractID& cid)
+{
+    uint8_t groupId[32];
+    if (!DocGetGroupId(groupId)) return;
+
+    Env::Key_T<PriviMe::GroupMemberKey> k0, k1;
+    _POD_(k0.m_Prefix.m_Cid) = cid;
+    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Member;
+    Env::Memcpy(k0.m_KeyInContract.m_GroupId, groupId, 32);
+    Env::Memset(k0.m_KeyInContract.m_Handle, 0, sizeof(k0.m_KeyInContract.m_Handle));
+
+    _POD_(k1.m_Prefix.m_Cid) = cid;
+    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Member;
+    Env::Memcpy(k1.m_KeyInContract.m_GroupId, groupId, 32);
+    Env::Memset(k1.m_KeyInContract.m_Handle, 0xFF, sizeof(k1.m_KeyInContract.m_Handle));
+
+    Env::DocArray gr("members");
+    uint32_t count = 0;
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::GroupMemberKey> key;
+    PriviMe::MemberInfo mi;
+    while (scanner.MoveNext_T(key, mi) && count < 200) {
+        Env::DocGroup entry("");
+        Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
+        Env::DocAddNum("role", (uint32_t)mi.m_Role);
+        Env::DocAddNum("permissions", mi.m_Permissions);
+        Env::DocAddNum("joined_height", mi.m_JoinedHeight);
+        count++;
+    }
+}
+
+void On_list_my_groups(const ContractID& cid)
+{
+    // Get caller's handle
+    UserKey uk(cid);
+    PubKey userPk;
+    uk.DerivePk(userPk);
+
+    Env::Key_T<PriviMe::OwnerKey> ok;
+    _POD_(ok.m_Prefix.m_Cid) = cid;
+    ok.m_KeyInContract.m_Tag = PriviMe::Tags::s_Owner;
+    _POD_(ok.m_KeyInContract.m_UserPk) = userPk;
+
+    PriviMe::OwnerRecord ownerRec;
+    if (!Env::VarReader::Read_T(ok, ownerRec))
+        return OnError("not registered");
+
+    // Scan all GroupMemberKey entries, filter by caller's handle
+    Env::Key_T<PriviMe::GroupMemberKey> k0, k1;
+    _POD_(k0.m_Prefix.m_Cid) = cid;
+    _POD_(k0.m_KeyInContract).SetZero();
+    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Member;
+
+    _POD_(k1.m_Prefix.m_Cid) = cid;
+    Env::Memset(&k1.m_KeyInContract, 0xFF, sizeof(k1.m_KeyInContract));
+    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Member;
+
+    Env::DocArray gr("groups");
+    uint32_t count = 0;
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::GroupMemberKey> key;
+    PriviMe::MemberInfo mi;
+    while (scanner.MoveNext_T(key, mi) && count < 50) {
+        // Check if this entry is for our handle
+        if (Env::Memcmp(key.m_KeyInContract.m_Handle, ownerRec.m_Handle, PriviMe::s_MaxHandleLen) != 0)
+            continue;
+
+        // Skip banned
+        if (mi.m_Role == PriviMe::Role::s_Banned)
+            continue;
+
+        // Load group info
+        Env::Key_T<PriviMe::GroupKey> gk;
+        _POD_(gk.m_Prefix.m_Cid) = cid;
+        gk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
+        Env::Memcpy(gk.m_KeyInContract.m_GroupId, key.m_KeyInContract.m_GroupId, 32);
+
+        PriviMe::GroupInfo gi;
+        if (!Env::VarReader::Read_T(gk, gi))
+            continue; // orphaned member record (group deleted)
+
+        Env::DocGroup entry("");
+        DocAddGroupId("group_id", key.m_KeyInContract.m_GroupId);
+        Env::DocAddText("name", gi.m_Name);
+        Env::DocAddNum("member_count", gi.m_MemberCount);
+        Env::DocAddNum("role", (uint32_t)mi.m_Role);
+        Env::DocAddNum("is_public", (uint32_t)gi.m_IsPublic);
+        count++;
+    }
+}
+
+void On_search_groups(const ContractID& cid)
+{
+    char szPrefix[PriviMe::s_MaxGroupNameLen + 1];
+    Env::Memset(szPrefix, 0, sizeof(szPrefix));
+    if (!Env::DocGetText("prefix", szPrefix, sizeof(szPrefix)))
+        return OnError("prefix required");
+
+    uint32_t prefixLen = 0;
+    for (uint32_t i = 0; i < PriviMe::s_MaxGroupNameLen && szPrefix[i]; i++) {
+        prefixLen++;
+    }
+    if (prefixLen == 0) return OnError("prefix empty");
+
+    // Scan all GroupKey entries, match name prefix
+    Env::Key_T<PriviMe::GroupKey> k0, k1;
+    _POD_(k0.m_Prefix.m_Cid) = cid;
+    _POD_(k0.m_KeyInContract).SetZero();
+    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
+
+    _POD_(k1.m_Prefix.m_Cid) = cid;
+    Env::Memset(&k1.m_KeyInContract, 0xFF, sizeof(k1.m_KeyInContract));
+    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
+
+    Env::DocArray gr("results");
+    uint32_t count = 0;
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::GroupKey> key;
+    PriviMe::GroupInfo gi;
+    while (scanner.MoveNext_T(key, gi) && count < 20) {
+        // Only show public groups
+        if (!gi.m_IsPublic)
+            continue;
+
+        // Check name prefix match
+        bool match = true;
+        for (uint32_t i = 0; i < prefixLen; i++) {
+            char a = szPrefix[i];
+            char b = gi.m_Name[i];
+            // Case-insensitive compare
+            if (a >= 'A' && a <= 'Z') a = a - 'A' + 'a';
+            if (b >= 'A' && b <= 'Z') b = b - 'A' + 'a';
+            if (a != b) { match = false; break; }
+        }
+        if (!match) continue;
+
+        Env::DocGroup entry("");
+        DocAddGroupId("group_id", key.m_KeyInContract.m_GroupId);
+        Env::DocAddText("name", gi.m_Name);
+        Env::DocAddText("creator", gi.m_CreatorHandle);
+        Env::DocAddNum("member_count", gi.m_MemberCount);
+        Env::DocAddNum("require_approval", (uint32_t)gi.m_RequireApproval);
+        count++;
+    }
+}
+
+void On_view_join_requests(const ContractID& cid)
+{
+    uint8_t groupId[32];
+    if (!DocGetGroupId(groupId)) return;
+
+    Env::Key_T<PriviMe::GroupJoinRequestKey> k0, k1;
+    _POD_(k0.m_Prefix.m_Cid) = cid;
+    k0.m_KeyInContract.m_Tag = PriviMe::Tags::s_JoinReq;
+    Env::Memcpy(k0.m_KeyInContract.m_GroupId, groupId, 32);
+    Env::Memset(k0.m_KeyInContract.m_Handle, 0, sizeof(k0.m_KeyInContract.m_Handle));
+
+    _POD_(k1.m_Prefix.m_Cid) = cid;
+    k1.m_KeyInContract.m_Tag = PriviMe::Tags::s_JoinReq;
+    Env::Memcpy(k1.m_KeyInContract.m_GroupId, groupId, 32);
+    Env::Memset(k1.m_KeyInContract.m_Handle, 0xFF, sizeof(k1.m_KeyInContract.m_Handle));
+
+    Env::DocArray gr("requests");
+    uint32_t count = 0;
+    Env::VarReader scanner(k0, k1);
+    Env::Key_T<PriviMe::GroupJoinRequestKey> key;
+    PriviMe::JoinRequest jr;
+    while (scanner.MoveNext_T(key, jr) && count < 50) {
+        Env::DocGroup entry("");
+        Env::DocAddText("handle", key.m_KeyInContract.m_Handle);
+        Env::DocAddNum("request_height", jr.m_RequestHeight);
+        count++;
+    }
+}
+
+void On_view_group_pins(const ContractID& cid)
+{
+    uint8_t groupId[32];
+    if (!DocGetGroupId(groupId)) return;
+
+    // Read group to get pin count
+    Env::Key_T<PriviMe::GroupKey> gk;
+    _POD_(gk.m_Prefix.m_Cid) = cid;
+    gk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Group;
+    Env::Memcpy(gk.m_KeyInContract.m_GroupId, groupId, 32);
+
+    PriviMe::GroupInfo gi;
+    if (!Env::VarReader::Read_T(gk, gi))
+        return OnError("group not found");
+
+    Env::DocArray gr("pins");
+    for (uint32_t i = 0; i < gi.m_PinCount; i++) {
+        Env::Key_T<PriviMe::GroupPinKey> pk;
+        _POD_(pk.m_Prefix.m_Cid) = cid;
+        pk.m_KeyInContract.m_Tag = PriviMe::Tags::s_Pin;
+        Env::Memcpy(pk.m_KeyInContract.m_GroupId, groupId, 32);
+        pk.m_KeyInContract.m_PinIndex = i;
+
+        PriviMe::PinInfo pi;
+        if (Env::VarReader::Read_T(pk, pi)) {
+            Env::DocGroup entry("");
+            Env::DocAddText("sender", pi.m_SenderHandle);
+            DocAddGroupId("message_hash", pi.m_MessageHash);
+            Env::DocAddNum("pinned_height", pi.m_PinnedHeight);
+            Env::DocAddNum("index", i);
+        }
+    }
 }
 
 // ============================================================================
@@ -816,7 +1305,7 @@ BEAM_EXPORT void Method_1()
 {
     Env::DocGroup root("");
 
-    char szRole[16], szAction[32];
+    char szRole[16], szAction[40];
     if (!Env::DocGetText("role", szRole, sizeof(szRole)))
         return OnError("role required");
     if (!Env::DocGetText("action", szAction, sizeof(szAction)))
@@ -827,32 +1316,52 @@ BEAM_EXPORT void Method_1()
 
     if (!Env::Strcmp(szRole, "manager"))
     {
-        if (!Env::Strcmp(szAction, "create_contract"))  return On_create_contract(cid);
-        if (!Env::Strcmp(szAction, "view_contracts"))   return On_view_contracts(cid);
-        if (!Env::Strcmp(szAction, "view_pool"))        return On_view_pool(cid);
-        if (!Env::Strcmp(szAction, "withdraw"))         return On_withdraw(cid);
-        if (!Env::Strcmp(szAction, "set_owner"))        return On_set_owner(cid);
-        if (!Env::Strcmp(szAction, "set_config"))       return On_set_config(cid);
-        if (!Env::Strcmp(szAction, "view_all"))         return On_view_all(cid);
-        if (!Env::Strcmp(szAction, "explicit_upgrade")) return On_explicit_upgrade(cid);
+        if (!Env::Strcmp(szAction, "create_contract"))    return On_create_contract(cid);
+        if (!Env::Strcmp(szAction, "view_contracts"))     return On_view_contracts(cid);
+        if (!Env::Strcmp(szAction, "view_pool"))          return On_view_pool(cid);
+        if (!Env::Strcmp(szAction, "withdraw"))           return On_withdraw(cid);
+        if (!Env::Strcmp(szAction, "set_owner"))          return On_set_owner(cid);
+        if (!Env::Strcmp(szAction, "set_config"))         return On_set_config(cid);
+        if (!Env::Strcmp(szAction, "view_all"))           return On_view_all(cid);
+        if (!Env::Strcmp(szAction, "explicit_upgrade"))   return On_explicit_upgrade(cid);
         if (!Env::Strcmp(szAction, "schedule_upgrade"))   return On_schedule_upgrade(cid);
-        if (!Env::Strcmp(szAction, "replace_admin"))       return On_replace_admin(cid);
-        if (!Env::Strcmp(szAction, "set_approvers"))       return On_set_approvers(cid);
-        if (!Env::Strcmp(szAction, "view_contract_info"))  return On_view_contract_info(cid);
+        if (!Env::Strcmp(szAction, "replace_admin"))      return On_replace_admin(cid);
+        if (!Env::Strcmp(szAction, "set_approvers"))      return On_set_approvers(cid);
+        if (!Env::Strcmp(szAction, "view_contract_info")) return On_view_contract_info(cid);
         return OnError("invalid action");
     }
 
     if (!Env::Strcmp(szRole, "user"))
     {
-        if (!Env::Strcmp(szAction, "my_handle"))        return On_my_handle(cid);
-        if (!Env::Strcmp(szAction, "register_handle"))  return On_register_handle(cid);
-        if (!Env::Strcmp(szAction, "update_profile"))   return On_update_profile(cid);
-        if (!Env::Strcmp(szAction, "release_handle"))   return On_release_handle(cid);
-        if (!Env::Strcmp(szAction, "set_avatar"))       return On_set_avatar(cid);
-        if (!Env::Strcmp(szAction, "resolve_handle"))   return On_resolve_handle(cid);
-        if (!Env::Strcmp(szAction, "search_handles"))  return On_search_handles(cid);
-        if (!Env::Strcmp(szAction, "resolve_walletid")) return On_resolve_walletid(cid);
-        if (!Env::Strcmp(szAction, "view_recent"))      return On_view_recent(cid);
+        // Identity
+        if (!Env::Strcmp(szAction, "my_handle"))           return On_my_handle(cid);
+        if (!Env::Strcmp(szAction, "register_handle"))     return On_register_handle(cid);
+        if (!Env::Strcmp(szAction, "update_profile"))      return On_update_profile(cid);
+        if (!Env::Strcmp(szAction, "release_handle"))      return On_release_handle(cid);
+        if (!Env::Strcmp(szAction, "resolve_handle"))      return On_resolve_handle(cid);
+        if (!Env::Strcmp(szAction, "search_handles"))      return On_search_handles(cid);
+        if (!Env::Strcmp(szAction, "resolve_walletid"))    return On_resolve_walletid(cid);
+        if (!Env::Strcmp(szAction, "view_recent"))         return On_view_recent(cid);
+        // Group TX
+        if (!Env::Strcmp(szAction, "create_group"))        return On_create_group(cid);
+        if (!Env::Strcmp(szAction, "join_group"))          return On_join_group(cid);
+        if (!Env::Strcmp(szAction, "remove_member"))       return On_remove_member(cid);
+        if (!Env::Strcmp(szAction, "set_member_role"))     return On_set_member_role(cid);
+        if (!Env::Strcmp(szAction, "update_group_info"))   return On_update_group_info(cid);
+        if (!Env::Strcmp(szAction, "leave_group"))         return On_leave_group(cid);
+        if (!Env::Strcmp(szAction, "approve_join_request")) return On_approve_join_request(cid);
+        if (!Env::Strcmp(szAction, "set_invite_link"))     return On_set_invite_link(cid);
+        if (!Env::Strcmp(szAction, "transfer_ownership"))  return On_transfer_ownership(cid);
+        if (!Env::Strcmp(szAction, "set_group_pin"))       return On_set_group_pin(cid);
+        if (!Env::Strcmp(szAction, "report_member"))       return On_report_member(cid);
+        if (!Env::Strcmp(szAction, "delete_group"))        return On_delete_group(cid);
+        // Group views
+        if (!Env::Strcmp(szAction, "view_group"))          return On_view_group(cid);
+        if (!Env::Strcmp(szAction, "list_members"))        return On_list_members(cid);
+        if (!Env::Strcmp(szAction, "list_my_groups"))      return On_list_my_groups(cid);
+        if (!Env::Strcmp(szAction, "search_groups"))       return On_search_groups(cid);
+        if (!Env::Strcmp(szAction, "view_join_requests"))  return On_view_join_requests(cid);
+        if (!Env::Strcmp(szAction, "view_group_pins"))     return On_view_group_pins(cid);
         return OnError("invalid action");
     }
 
