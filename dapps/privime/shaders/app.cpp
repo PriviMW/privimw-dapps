@@ -11,6 +11,9 @@ void OnError(const char* sz)
     Env::DocAddText("error", sz);
 }
 
+// Forward declaration
+bool DocGetTextOrHex(const char* key, char* szOut, uint32_t maxLen);
+
 // ============================================================================
 // Key derivation
 // ============================================================================
@@ -534,7 +537,7 @@ void On_register_handle(const ContractID& cid)
     }
     Env::Memcpy(args.m_Handle, szHandle, PriviMe::s_MaxHandleLen);
 
-    Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
+    DocGetTextOrHex("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
 
     if (Env::DocGetBlob("wallet_id", args.m_WalletIdRaw, sizeof(args.m_WalletIdRaw))
         != sizeof(args.m_WalletIdRaw))
@@ -566,7 +569,7 @@ void On_update_profile(const ContractID& cid)
         != sizeof(args.m_WalletIdRaw))
         return OnError("wallet_id must be 34 bytes");
 
-    Env::DocGetText("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
+    DocGetTextOrHex("display_name", args.m_DisplayName, sizeof(args.m_DisplayName));
 
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);
@@ -745,6 +748,48 @@ void On_view_recent(const ContractID& cid)
 }
 
 // ============================================================================
+// Hex decode helper — decodes hex string to raw bytes (for values with spaces/emoji)
+// ============================================================================
+
+static uint8_t HexDigit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return 0xFF;
+}
+
+// Try to read text from "key" first, then fall back to "key_hex" (hex-encoded UTF-8).
+// Returns true if either succeeds, output in szOut (null-terminated).
+bool DocGetTextOrHex(const char* key, char* szOut, uint32_t maxLen)
+{
+    if (Env::DocGetText(key, szOut, maxLen))
+        return true;
+
+    // Try hex variant: "key_hex"
+    char hexKey[48];
+    uint32_t keyLen = 0;
+    while (key[keyLen] && keyLen < 40) { hexKey[keyLen] = key[keyLen]; keyLen++; }
+    hexKey[keyLen] = '_'; hexKey[keyLen+1] = 'h'; hexKey[keyLen+2] = 'e'; hexKey[keyLen+3] = 'x'; hexKey[keyLen+4] = 0;
+
+    char hexBuf[256];
+    Env::Memset(hexBuf, 0, sizeof(hexBuf));
+    if (!Env::DocGetText(hexKey, hexBuf, sizeof(hexBuf)))
+        return false;
+
+    // Decode hex → raw bytes
+    Env::Memset(szOut, 0, maxLen);
+    uint32_t i = 0, o = 0;
+    while (hexBuf[i] && hexBuf[i+1] && o < maxLen - 1) {
+        uint8_t hi = HexDigit(hexBuf[i]);
+        uint8_t lo = HexDigit(hexBuf[i+1]);
+        if (hi == 0xFF || lo == 0xFF) break;
+        szOut[o++] = (char)((hi << 4) | lo);
+        i += 2;
+    }
+    return o > 0;
+}
+
+// ============================================================================
 // User handlers — Group TX actions
 // ============================================================================
 
@@ -755,7 +800,7 @@ void On_create_group(const ContractID& cid)
 
     char szName[PriviMe::s_MaxGroupNameLen + 1];
     Env::Memset(szName, 0, sizeof(szName));
-    if (!Env::DocGetText("name", szName, sizeof(szName)))
+    if (!DocGetTextOrHex("name", szName, sizeof(szName)))
         return OnError("name required");
     Env::Memcpy(args.m_Name, szName, PriviMe::s_MaxGroupNameLen);
 
@@ -854,7 +899,7 @@ void On_update_group_info(const ContractID& cid)
 
     char szName[PriviMe::s_MaxGroupNameLen + 1];
     Env::Memset(szName, 0, sizeof(szName));
-    if (Env::DocGetText("name", szName, sizeof(szName)))
+    if (DocGetTextOrHex("name", szName, sizeof(szName)))
         Env::Memcpy(args.m_Name, szName, PriviMe::s_MaxGroupNameLen);
 
     uint32_t isPublic = 0xFF, requireApproval = 0xFF;

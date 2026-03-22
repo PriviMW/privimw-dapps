@@ -276,6 +276,10 @@ BEAM_EXPORT void Method_5(const PriviMe::Method::ReleaseHandle& r)
     PriviMe::OwnerRecord ownerRec;
     Env::Halt_if(!Env::LoadVar_T(ok, ownerRec));
 
+    // Block deletion if user is creator of any group (must transfer/delete groups first)
+    uint32_t grpCount = PriviMe::GetGroupCount(ownerRec.m_Handle);
+    Env::Halt_if(grpCount > 0);
+
     PriviMe::HandleKey hk;
     Env::Memcpy(hk.m_Handle, ownerRec.m_Handle, sizeof(hk.m_Handle));
     Env::DelVar_T(hk);
@@ -476,16 +480,24 @@ BEAM_EXPORT void Method_12(const PriviMe::Method::RemoveMember& r)
         Env::Halt_if(callerMi.m_Role != PriviMe::Role::s_Creator);
     }
 
-    if (r.m_Ban) {
+    if (targetMi.m_Role == PriviMe::Role::s_Banned) {
+        // Target is banned — m_Ban=0 means unban (delete ban record, user can rejoin)
+        if (!r.m_Ban) {
+            PriviMe::DeleteMember(r.m_GroupId, r.m_TargetHandle);
+            // Don't increment member count — they're not a member yet, just un-blocked
+        }
+        // else: already banned, nothing to do
+    } else if (r.m_Ban) {
         targetMi.m_Role = PriviMe::Role::s_Banned;
         targetMi.m_Permissions = 0;
         PriviMe::SaveMember(r.m_GroupId, r.m_TargetHandle, targetMi);
+        gi.m_MemberCount--;
+        PriviMe::SaveGroup(r.m_GroupId, gi);
     } else {
         PriviMe::DeleteMember(r.m_GroupId, r.m_TargetHandle);
+        gi.m_MemberCount--;
+        PriviMe::SaveGroup(r.m_GroupId, gi);
     }
-
-    gi.m_MemberCount--;
-    PriviMe::SaveGroup(r.m_GroupId, gi);
 
     Env::AddSig(r.m_UserPk);
 }
