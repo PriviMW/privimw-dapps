@@ -79,4 +79,4 @@ Uses Upgradable3 for in-place contract upgrades (Method_2 reserved).
 
 ## License
 
-MIT License — see [LICENSE](LICENSE)
+Apache License 2.0 — see [LICENSE](LICENSE)
