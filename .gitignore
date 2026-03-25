@@ -20,7 +20,9 @@ NUL
 Thumbs.db
 Desktop.ini
 
-# ── Local IDE/tool settings ─────────────────────────────────────────
+# ── Local IDE/tool settings ───────────────────────────────────────────────────
+.idea/
+.vscode/
 
 # ── Environment / secrets ─────────────────────────────────────────────────────
 .env

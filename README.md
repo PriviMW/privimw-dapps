@@ -18,7 +18,6 @@ privimw-dapps/
 │   └── privime/shaders/       # PriviMe contract + app shader (C++)
 ├── shared/
 │   └── shader-headers/        # Beam SDK headers (shared by all DApps)
-├── docs/                      # Development reference
 └── tools/scripts/             # Debug & utility scripts
 ```
 
@@ -26,8 +25,8 @@ privimw-dapps/
 
 ### Prerequisites
 
-- [WASI SDK 14.0](https://github.com/aspect-build/aspect-build-wasi-sdk/releases)
-- [Beam Shader SDK](https://github.com/AlessandroLongo/beam-shader-sdk)
+- [WASI SDK](https://github.com/BeamMW/wasi-sdk)
+- [Beam Shader SDK](https://github.com/BeamMW/shader-sdk)
 
 ### Compile
 
