@@ -164,7 +164,7 @@ void On_create_contract(const ContractID& cid)
     OwnerKey ok;
     ok.DerivePk(params.m_OwnerPk);
 
-    Env::GenerateKernel(nullptr, 0, &params, sizeof(params), nullptr, 0, nullptr, 0, "create PriviBets contract", 0);
+    Env::GenerateKernel(nullptr, 0, &params, sizeof(params), nullptr, 0, nullptr, 0, "create Dice contract", 0);
 }
 
 void On_view_contracts(const ContractID& cid)
@@ -197,11 +197,14 @@ void On_view_pool(const ContractID& cid)
     uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
     if (s.m_TotalPayouts > total) total = 0;
     else total -= s.m_TotalPayouts;
+    if (s.m_TotalWithdrawn > total) total = 0;
+    else total -= s.m_TotalWithdrawn;
     uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
     uint64_t available = (reserved <= total) ? (total - reserved) : 0;
 
     Env::DocGroup gr("pool");
     Env::DocAddNum("total_deposited", s.m_TotalDeposited);
+    Env::DocAddNum("total_withdrawn", s.m_TotalWithdrawn);
     Env::DocAddNum("total_bets", s.m_TotalBets);
     Env::DocAddNum("total_payouts", s.m_TotalPayouts);
     Env::DocAddNum("pending_bets", s.m_PendingBets);
@@ -257,8 +260,9 @@ void On_place_bet(const ContractID& cid)
     fc.m_Amount = args.m_Amount;
     fc.m_Consume = 1;
 
-    // nCharge covers: PlaceBet base (~130K) + auto-resolve up to 5 expired bets (~250K) + AdvanceFirstUnresolved (~20K)
-    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "PriviBets: place bet", 400000);
+    // nCharge covers: state load/save + bet save + FundsLock + get_Height/get_HdrInfo
+    // + AutoResolveExpired (scan up to 20, resolve up to 5) + AdvanceFirstUnresolved (10 loads)
+    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "Dice: place bet", 800000);
 }
 
 void On_check_results(const ContractID& cid)
@@ -284,27 +288,31 @@ void On_check_results(const ContractID& cid)
     uint64_t totalPayout = 0;
     uint32_t processedCount = 0;
 
-    // Batch range scan — one Vars_Enum instead of N individual reads
-    if (s.m_FirstUnresolvedBetId < s.m_NextBetId)
+    // Batch range scan from 0 (not FirstUnresolvedBetId) to find Won-but-unclaimed entries
+    // that the cursor may have advanced past. Max 500 entries scanned to bound charge cost.
+    static const uint32_t s_MaxScan = 500;
+    if (s.m_NextBetId > 0)
     {
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_BetId = s.m_FirstUnresolvedBetId;
+        k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
         k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
-        while (scanner.MoveNext_T(key, b) && processedCount < 100)
+        uint32_t scanned = 0;
+        while (scanner.MoveNext_T(key, b) && processedCount < 100 && scanned < s_MaxScan)
         {
+            scanned++;
             if (_POD_(b.m_UserPk) != args.m_UserPk) continue;
 
             if (b.m_Status == BeamBet::BetStatus::Pending)
             {
-                if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
+                if (hCurrent < b.m_RevealAt) continue;
 
-                Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                Height revealHeight = b.m_RevealAt;
                 HashProcessor::Sha256 hp;
                 hp.Write(b.m_PlacementHash);
                 hp.Write(&revealHeight, sizeof(revealHeight));
@@ -342,10 +350,11 @@ void On_check_results(const ContractID& cid)
     Env::KeyID kid(&uk, sizeof(uk));
 
     // Dynamic charge: base overhead + per-bet cost (LoadVar + SHA256 + SaveVar)
-    // Base: state load/save + AddSig + FundsUnlock + AdvanceFirstUnresolved(50) ≈ 700K
+    // Base: state load/save + AddSig + FundsUnlock + scan up to 500 entries ≈ 2M
     // Per bet: LoadVar(Bet) + SHA256 + SaveVar(Bet) ≈ 50K
-    uint32_t nCharge = 700000 + processedCount * 50000;
-    if (nCharge < 300000) nCharge = 300000;   // Floor for minimal overhead
+    // Note: scans from 0 to find Won entries before cursor (max 500 entries scanned)
+    uint32_t nCharge = 2000000 + processedCount * 50000;
+    if (nCharge < 600000) nCharge = 600000;   // Floor for minimal overhead
 
     if (totalPayout > 0)
     {
@@ -353,11 +362,11 @@ void On_check_results(const ContractID& cid)
         fc.m_Aid = s.m_AssetId;
         fc.m_Amount = totalPayout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: check results", nCharge);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: check results", nCharge);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: check results", nCharge);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: check results", nCharge);
     }
 }
 
@@ -411,8 +420,8 @@ void On_my_bets(const ContractID& cid)
             if (b.m_Status != BeamBet::BetStatus::Pending) continue;
 
             uint64_t blocksRemaining = 0;
-            if (b.m_CreatedHeight + s.m_RevealEpoch > currentHeight)
-                blocksRemaining = (b.m_CreatedHeight + s.m_RevealEpoch) - currentHeight;
+            if (b.m_RevealAt > currentHeight)
+                blocksRemaining = b.m_RevealAt - currentHeight;
 
             Env::DocGroup betGr("");
             Env::DocAddNum("bet_id", b.m_BetId);
@@ -427,7 +436,7 @@ void On_my_bets(const ContractID& cid)
             // Preview result for ready bets (deterministic — no TX needed to know outcome)
             if (blocksRemaining == 0)
             {
-                Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                Height revealHeight = b.m_RevealAt;
                 HashProcessor::Sha256 hp;
                 hp.Write(b.m_PlacementHash);
                 hp.Write(&revealHeight, sizeof(revealHeight));
@@ -568,11 +577,14 @@ void On_view_all(const ContractID& cid)
         uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
         if (s.m_TotalPayouts > total) total = 0;
         else total -= s.m_TotalPayouts;
+        if (s.m_TotalWithdrawn > total) total = 0;
+        else total -= s.m_TotalWithdrawn;
         uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
         uint64_t available = (reserved <= total) ? (total - reserved) : 0;
 
         Env::DocGroup gr("pool");
         Env::DocAddNum("total_deposited", s.m_TotalDeposited);
+        Env::DocAddNum("total_withdrawn", s.m_TotalWithdrawn);
         Env::DocAddNum("total_bets", s.m_TotalBets);
         Env::DocAddNum("total_payouts", s.m_TotalPayouts);
         Env::DocAddNum("pending_bets", s.m_PendingBets);
@@ -628,8 +640,8 @@ void On_view_all(const ContractID& cid)
                 {
                     // Output pending bet directly to "bets" array
                     uint64_t blocksRemaining = 0;
-                    if (b.m_CreatedHeight + s.m_RevealEpoch > currentHeight)
-                        blocksRemaining = (b.m_CreatedHeight + s.m_RevealEpoch) - currentHeight;
+                    if (b.m_RevealAt > currentHeight)
+                        blocksRemaining = b.m_RevealAt - currentHeight;
 
                     Env::DocGroup betGr("");
                     Env::DocAddNum("bet_id", b.m_BetId);
@@ -644,7 +656,7 @@ void On_view_all(const ContractID& cid)
                     // Preview result for ready bets (deterministic — no TX needed to know outcome)
                     if (blocksRemaining == 0)
                     {
-                        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+                        Height revealHeight = b.m_RevealAt;
                         HashProcessor::Sha256 hp;
                         hp.Write(b.m_PlacementHash);
                         hp.Write(&revealHeight, sizeof(revealHeight));
@@ -798,14 +810,14 @@ void On_check_result(const ContractID& cid)
 
     if (b.m_Status == BeamBet::BetStatus::Pending)
     {
-        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch)
+        if (hCurrent < b.m_RevealAt)
         {
             OnError("Bet not ready for reveal yet");
             return;
         }
 
         // Replicate CalculateRandomResult (placementHash + revealHeight + betId)
-        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+        Height revealHeight = b.m_RevealAt;
         HashProcessor::Sha256 hp;
         hp.Write(b.m_PlacementHash);
         hp.Write(&revealHeight, sizeof(revealHeight));
@@ -845,11 +857,11 @@ void On_check_result(const ContractID& cid)
         fc.m_Aid = b.m_AssetId;  // Use bet's actual asset (matches contract Method_9)
         fc.m_Amount = payout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: check single result", 250000);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: check single result", 250000);
     }
 }
 
@@ -900,7 +912,7 @@ void On_view_all_bets(const ContractID& cid)
 
             if (b.m_Status == BeamBet::BetStatus::Pending)
             {
-                uint64_t readyAt = b.m_CreatedHeight + s.m_RevealEpoch;
+                uint64_t readyAt = b.m_RevealAt;
                 uint64_t blocksRemaining = (hCurrent < readyAt) ? (readyAt - hCurrent) : 0;
                 Env::DocAddNum("blocks_remaining", blocksRemaining);
                 Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
@@ -976,7 +988,7 @@ void On_reveal_bet(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: reveal bet", 130000);
+    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: reveal bet", 130000);
 }
 
 void On_resolve_bets(const ContractID& cid)
@@ -988,10 +1000,11 @@ void On_resolve_bets(const ContractID& cid)
     args.m_MaxCount = tempCount;
 
     // Dynamic charge: base covers state + AdvanceFirstUnresolved(50), per-bet covers LoadVar + SHA256 + SaveVar
-    uint32_t nCharge = 750000 + tempCount * 50000;
+    // Extra margin for scanning past non-Pending entries (maxScan = maxCount + 50)
+    uint32_t nCharge = 900000 + tempCount * 50000;
 
     // No FundsChange needed - resolve_bets only reveals results, no payouts
-    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "PriviBets: resolve expired bets", nCharge);
+    Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "Dice: resolve expired bets", nCharge);
 }
 
 void On_deposit(const ContractID& cid)
@@ -1017,7 +1030,7 @@ void On_deposit(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: deposit", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: deposit", 75000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -1043,7 +1056,7 @@ void On_withdraw(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "PriviBets: withdraw", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: withdraw", 75000);
 }
 
 void On_set_owner(const ContractID& cid)
@@ -1054,7 +1067,7 @@ void On_set_owner(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: set owner", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set owner", 70000);
 }
 
 void On_set_config(const ContractID& cid)
@@ -1075,7 +1088,7 @@ void On_set_config(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "PriviBets: set config", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set config", 70000);
 }
 
 // ============================================================================

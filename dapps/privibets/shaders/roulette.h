@@ -5,7 +5,7 @@
 namespace BeamRoulette {
 
 // Shader ID (hash of compiled roulette.wasm) - update after each recompile
-static const ShaderID s_SID = {0x5d,0x57,0x70,0xb8,0x9d,0x92,0xbf,0xab,0xfa,0xd9,0xdd,0xa6,0xa5,0x8c,0x19,0xc0,0xdc,0x73,0x46,0xcb,0x45,0x24,0x21,0x31,0xa7,0xbc,0x5b,0x29,0xdb,0x8b,0x88,0x1b};
+static const ShaderID s_SID = {0x04,0x92,0xcf,0x40,0xb3,0x7b,0x42,0xba,0xa4,0x65,0x33,0xcc,0x8e,0xe3,0xda,0xdb,0x3f,0x7f,0x46,0xc7,0xe0,0xd4,0x3f,0xfa,0x3e,0x48,0xa7,0x81,0x38,0x1e,0x7a,0x5b};
 
 // Multiplier constants (x100 scale)
 static const uint64_t s_DefaultStraightMult = 3600ULL;     // 36x (35:1)
@@ -61,7 +61,8 @@ struct State {
     uint64_t m_EvenMoneyMult;       // Even-money multiplier (x100: 200 = 2x)
     uint64_t m_DozenColMult;        // Dozen/Column multiplier (x100: 300 = 3x)
     AssetID m_AssetId;              // Asset ID (0 = BEAM)
-    uint64_t m_TotalDeposited;      // Total owner deposits (cumulative)
+    uint64_t m_TotalDeposited;      // Total owner deposits (cumulative, never decreases)
+    uint64_t m_TotalWithdrawn;      // Total owner withdrawals (cumulative, never decreases)
     uint64_t m_TotalBets;           // Total user wagers received (cumulative)
     uint64_t m_TotalPayouts;        // Total payouts made to users (cumulative)
     uint64_t m_PendingBets;         // Sum of locked wagers for pending spins

@@ -31,12 +31,14 @@ void SaveState() {
 }
 
 // Calculate available pool balance (safe, no underflow)
-// Available = total_in_contract - pending_max_payout - pending_payouts
+// Available = total_in_contract - total_withdrawn - pending_max_payout - pending_payouts
 uint64_t GetAvailableBalance() {
     State& s = GetState();
     uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
     if (s.m_TotalPayouts > total) return 0;
     total -= s.m_TotalPayouts;
+    if (s.m_TotalWithdrawn > total) return 0;
+    total -= s.m_TotalWithdrawn;
 
     uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
     if (reserved > total) return 0;
@@ -164,11 +166,13 @@ void AccumulateClaim(Spin& spin, State& s, uint64_t& totalPayout) {
 }
 
 // Auto-resolve expired pending spins (piggybacked onto user interactions)
-void AutoResolveExpired(State& s, uint32_t maxCount) {
+void AutoResolveExpired(State& s, uint32_t maxCount, uint32_t maxScan = 20) {
     Height hCurrent = Env::get_Height();
     uint32_t resolved = 0;
+    uint32_t scanned = 0;
 
-    for (uint64_t spinId = s.m_FirstUnresolvedSpinId; spinId < s.m_NextSpinId && resolved < maxCount; spinId++) {
+    for (uint64_t spinId = s.m_FirstUnresolvedSpinId; spinId < s.m_NextSpinId && resolved < maxCount && scanned < maxScan; spinId++) {
+        scanned++;
         SpinKey sk;
         sk.m_SpinId = spinId;
 
@@ -197,7 +201,7 @@ void AdvanceFirstUnresolved(State& s, uint32_t maxAdvance = 50) {
             count++;
             continue;
         }
-        if (spin.m_Status == SpinStatus::Pending || spin.m_Status == SpinStatus::Won)
+        if (spin.m_Status == SpinStatus::Pending)
             break;
         s.m_FirstUnresolvedSpinId++;
         count++;
@@ -355,8 +359,14 @@ BEAM_EXPORT void Method_3(const BeamRoulette::Method::CheckResults& r)
     uint64_t totalPayout = 0;
     AssetID assetId = s.m_AssetId;
     uint32_t processedCount = 0;
+    uint32_t scanned = 0;
+    static const uint32_t s_MaxScan = 500;
 
-    for (uint64_t spinId = s.m_FirstUnresolvedSpinId; spinId < s.m_NextSpinId && processedCount < 50; spinId++) {
+    // Scan from 1 (not FirstUnresolvedSpinId) so we find Won-but-unclaimed spins
+    // that the cursor may have advanced past. FirstUnresolvedSpinId is only for
+    // AutoResolveExpired's benefit — user-facing queries must find ALL claimable entries.
+    for (uint64_t spinId = 1; spinId < s.m_NextSpinId && processedCount < 50 && scanned < s_MaxScan; spinId++) {
+        scanned++;
         BeamRoulette::SpinKey sk;
         sk.m_SpinId = spinId;
 
@@ -423,10 +433,8 @@ BEAM_EXPORT void Method_5(const BeamRoulette::Method::Withdraw& r)
 
     Env::FundsUnlock(s.m_AssetId, r.m_Amount);
 
-    if (r.m_Amount <= s.m_TotalDeposited)
-        s.m_TotalDeposited -= r.m_Amount;
-    else
-        s.m_TotalDeposited = 0;
+    // Track cumulative withdrawals (total_deposited stays as cumulative deposits)
+    s.m_TotalWithdrawn += r.m_Amount;
 
     BeamRoulette::SaveState();
 
@@ -574,8 +582,11 @@ BEAM_EXPORT void Method_10(const BeamRoulette::Method::ResolveExpiredSpins& r)
     if (maxCount == 0 || maxCount > 200) maxCount = 50;
 
     uint32_t resolved = 0;
+    uint32_t scanned = 0;
+    uint32_t maxScan = maxCount + 50; // Allow scanning past non-Pending entries
 
-    for (uint64_t spinId = s.m_FirstUnresolvedSpinId; spinId < s.m_NextSpinId && resolved < maxCount; spinId++) {
+    for (uint64_t spinId = s.m_FirstUnresolvedSpinId; spinId < s.m_NextSpinId && resolved < maxCount && scanned < maxScan; spinId++) {
+        scanned++;
         BeamRoulette::SpinKey sk;
         sk.m_SpinId = spinId;
 

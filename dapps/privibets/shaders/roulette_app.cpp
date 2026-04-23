@@ -270,11 +270,14 @@ void On_view_pool(const ContractID& cid)
     uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
     if (s.m_TotalPayouts > total) total = 0;
     else total -= s.m_TotalPayouts;
+    if (s.m_TotalWithdrawn > total) total = 0;
+    else total -= s.m_TotalWithdrawn;
     uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
     uint64_t available = (reserved <= total) ? (total - reserved) : 0;
 
     Env::DocGroup gr("pool");
     Env::DocAddNum("total_deposited", s.m_TotalDeposited);
+    Env::DocAddNum("total_withdrawn", s.m_TotalWithdrawn);
     Env::DocAddNum("total_bets", s.m_TotalBets);
     Env::DocAddNum("total_payouts", s.m_TotalPayouts);
     Env::DocAddNum("pending_bets", s.m_PendingBets);
@@ -403,8 +406,9 @@ void On_place_bets(const ContractID& cid)
     fc.m_Amount = totalAmount;
     fc.m_Consume = 1;
 
-    // nCharge: base PlaceBets (~200K) + per-position validation (~20K each) + auto-resolve 5 (~300K) + AdvanceFirstUnresolved (~20K)
-    uint32_t nCharge = 600000 + numBets * 20000;
+    // nCharge: state load/save + spin save + FundsLock + get_Height/get_HdrInfo + per-position validation
+    // + AutoResolveExpired (scan up to 20, resolve up to 5, Spin=~436 bytes) + AdvanceFirstUnresolved (10 loads)
+    uint32_t nCharge = 1100000 + numBets * 30000;
 
     Env::GenerateKernel(&cid, BeamRoulette::Method::PlaceBets::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "Roulette: place bets", nCharge);
 }
@@ -433,19 +437,24 @@ void On_check_results(const ContractID& cid)
     uint32_t processedCount = 0;
 
     // Pre-scan to estimate payout for FundsChange
-    if (s.m_FirstUnresolvedSpinId < s.m_NextSpinId)
+    // Scan from 1 (not FirstUnresolvedSpinId) to find Won-but-unclaimed spins
+    // that the cursor may have advanced past. Max 500 entries scanned to bound charge cost.
+    static const uint32_t s_MaxScan = 500;
+    if (s.m_NextSpinId > 1)
     {
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_SpinId = s.m_FirstUnresolvedSpinId;
+        k0.m_KeyInContract.m_SpinId = 1;
         k1.m_Prefix.m_Cid = cid;
         k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamRoulette::SpinKey> key;
         BeamRoulette::Spin spin;
-        while (scanner.MoveNext_T(key, spin) && processedCount < 50)
+        uint32_t scanned = 0;
+        while (scanner.MoveNext_T(key, spin) && processedCount < 50 && scanned < s_MaxScan)
         {
+            scanned++;
             if (_POD_(spin.m_UserPk) != args.m_UserPk) continue;
 
             if (spin.m_Status == BeamRoulette::SpinStatus::Pending)
@@ -477,8 +486,10 @@ void On_check_results(const ContractID& cid)
     Env::KeyID kid(&uk, sizeof(uk));
 
     // Dynamic charge: base + per-spin cost (Spin struct is large: LoadVar + SHA256 + 10 bet checks + SaveVar)
-    uint32_t nCharge = 800000 + processedCount * 100000;
-    if (nCharge < 400000) nCharge = 400000;
+    // Base covers scan up to 500 entries + state load/save + AddSig + FundsUnlock + AdvanceFirstUnresolved
+    // Note: scans from 1 to find Won entries before cursor (max 500 entries scanned)
+    uint32_t nCharge = 2500000 + processedCount * 100000;
+    if (nCharge < 600000) nCharge = 600000;
 
     if (totalPayout > 0)
     {
@@ -699,11 +710,14 @@ void On_view_all(const ContractID& cid)
         uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
         if (s.m_TotalPayouts > total) total = 0;
         else total -= s.m_TotalPayouts;
+        if (s.m_TotalWithdrawn > total) total = 0;
+        else total -= s.m_TotalWithdrawn;
         uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
         uint64_t available = (reserved <= total) ? (total - reserved) : 0;
 
         Env::DocGroup gr("pool");
         Env::DocAddNum("total_deposited", s.m_TotalDeposited);
+        Env::DocAddNum("total_withdrawn", s.m_TotalWithdrawn);
         Env::DocAddNum("total_bets", s.m_TotalBets);
         Env::DocAddNum("total_payouts", s.m_TotalPayouts);
         Env::DocAddNum("pending_bets", s.m_PendingBets);
@@ -1058,7 +1072,8 @@ void On_resolve_spins(const ContractID& cid)
     args.m_MaxCount = tempCount;
 
     // Dynamic charge: Spin structs are large, per-spin cost is higher than d100
-    uint32_t nCharge = 800000 + tempCount * 100000;
+    // Extra margin for scanning past non-Pending entries (maxScan = maxCount + 50)
+    uint32_t nCharge = 1200000 + tempCount * 100000;
 
     Env::GenerateKernel(&cid, BeamRoulette::Method::ResolveExpiredSpins::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "Roulette: resolve expired spins", nCharge);
 }

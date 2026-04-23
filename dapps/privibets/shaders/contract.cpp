@@ -26,13 +26,15 @@ void SaveState() {
 }
 
 // Calculate available pool balance (safe, no underflow)
-// Available = total_in_contract - pending_max_payout - pending_payouts
+// Available = total_in_contract - total_withdrawn - pending_max_payout - pending_payouts
 // where total_in_contract = deposited + user_bets - already_paid_out
 uint64_t GetAvailableBalance() {
     State& s = GetState();
     uint64_t total = s.m_TotalDeposited + s.m_TotalBets;
     if (s.m_TotalPayouts > total) return 0;
     total -= s.m_TotalPayouts;
+    if (s.m_TotalWithdrawn > total) return 0;
+    total -= s.m_TotalWithdrawn;
 
     // Reserved: pending bets' max possible payouts + won-but-unclaimed payouts
     uint64_t reserved = s.m_PendingMaxPayout + s.m_PendingPayouts;
@@ -112,20 +114,22 @@ void AccumulateClaim(Bet& b, State& s, uint64_t& totalPayout) {
 // Auto-resolve expired pending bets (piggybacked onto user interactions)
 // Resolves up to maxCount expired bets from FirstUnresolvedBetId.
 // No FundsUnlock — only reveals results. Won bets wait for user to claim.
-void AutoResolveExpired(State& s, uint32_t maxCount) {
+void AutoResolveExpired(State& s, uint32_t maxCount, uint32_t maxScan = 20) {
     Height hCurrent = Env::get_Height();
     uint32_t resolved = 0;
+    uint32_t scanned = 0;
 
-    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && resolved < maxCount; betId++) {
+    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && resolved < maxCount && scanned < maxScan; betId++) {
+        scanned++;
         BetKey bk;
         bk.m_BetId = betId;
 
         Bet b;
         if (!Env::LoadVar_T(bk, b)) continue;
         if (b.m_Status != BetStatus::Pending) continue;
-        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) break; // remaining bets are newer, stop
+        if (hCurrent < b.m_RevealAt) break; // remaining bets are newer, stop
 
-        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+        Height revealHeight = b.m_RevealAt;
         uint8_t result = CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         ProcessBetResult(b, result, s);
 
@@ -146,7 +150,7 @@ void AdvanceFirstUnresolved(State& s, uint32_t maxAdvance = 50) {
             count++;
             continue;
         }
-        if (b.m_Status == BetStatus::Pending || b.m_Status == BetStatus::Won)
+        if (b.m_Status == BetStatus::Pending)
             break;
         s.m_FirstUnresolvedBetId++;
         count++;
@@ -234,6 +238,7 @@ BEAM_EXPORT void Method_2(const BeamBet::Method::PlaceBet& r)
     _POD_(b.m_PlacementHash) = hdr.m_Hash;
     b.m_Status = BeamBet::BetStatus::Pending;
     b.m_CreatedHeight = Env::get_Height();
+    b.m_RevealAt = b.m_CreatedHeight + s.m_RevealEpoch;
     b.m_Payout = 0;
     b.m_Multiplier = mult;
     b.m_MaxPayout = maxPayout;
@@ -272,9 +277,14 @@ BEAM_EXPORT void Method_3(const BeamBet::Method::CheckResults& r)
     uint64_t totalPayout = 0;
     AssetID assetId = s.m_AssetId;
     uint32_t processedCount = 0;
+    uint32_t scanned = 0;
+    static const uint32_t s_MaxScan = 500;
 
-    // Start from FirstUnresolvedBetId — skip bets already Lost/Claimed
-    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && processedCount < 100; betId++) {
+    // Scan from 0 (not FirstUnresolvedBetId) so we find Won-but-unclaimed entries
+    // that the cursor may have advanced past. FirstUnresolvedBetId is only for
+    // AutoResolveExpired's benefit — user-facing queries must find ALL claimable entries.
+    for (uint64_t betId = 0; betId < s.m_NextBetId && processedCount < 100 && scanned < s_MaxScan; betId++) {
+        scanned++;
         BeamBet::BetKey bk;
         bk.m_BetId = betId;
 
@@ -284,9 +294,9 @@ BEAM_EXPORT void Method_3(const BeamBet::Method::CheckResults& r)
         if (_POD_(b.m_UserPk) != userPk) continue;
 
         if (b.m_Status == BeamBet::BetStatus::Pending) {
-            if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) continue;
+            if (hCurrent < b.m_RevealAt) continue;
 
-            Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+            Height revealHeight = b.m_RevealAt;
             uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
             BeamBet::ProcessBetResult(b, result, s);
         }
@@ -342,11 +352,8 @@ BEAM_EXPORT void Method_5(const BeamBet::Method::Withdraw& r)
 
     Env::FundsUnlock(s.m_AssetId, r.m_Amount);
 
-    // Adjust deposit tracking (profits may exceed original deposit)
-    if (r.m_Amount <= s.m_TotalDeposited)
-        s.m_TotalDeposited -= r.m_Amount;
-    else
-        s.m_TotalDeposited = 0;
+    // Track cumulative withdrawals (total_deposited stays as cumulative deposits)
+    s.m_TotalWithdrawn += r.m_Amount;
 
     BeamBet::SaveState();
 
@@ -425,10 +432,10 @@ BEAM_EXPORT void Method_8(const BeamBet::Method::RevealBet& r)
 
     // Must wait for reveal epoch
     Height hCurrent = Env::get_Height();
-    if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) Env::Halt();
+    if (hCurrent < b.m_RevealAt) Env::Halt();
 
     // Deterministic result - same formula as user reveal (owner cannot manipulate)
-    Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+    Height revealHeight = b.m_RevealAt;
     uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
 
     BeamBet::ProcessBetResult(b, result, s);
@@ -462,9 +469,9 @@ BEAM_EXPORT void Method_9(const BeamBet::Method::CheckSingleResult& r)
     if (b.m_Status == BeamBet::BetStatus::Pending)
     {
         // Must wait for reveal epoch
-        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) Env::Halt();
+        if (hCurrent < b.m_RevealAt) Env::Halt();
 
-        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+        Height revealHeight = b.m_RevealAt;
         uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         BeamBet::ProcessBetResult(b, result, s);
     }
@@ -509,18 +516,21 @@ BEAM_EXPORT void Method_10(const BeamBet::Method::ResolveExpiredBets& r)
     if (maxCount == 0 || maxCount > 200) maxCount = 50;
 
     uint32_t resolved = 0;
+    uint32_t scanned = 0;
+    uint32_t maxScan = maxCount + 50; // Allow scanning past non-Pending entries
 
     // Start from FirstUnresolvedBetId — skip bets already Lost/Claimed
-    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && resolved < maxCount; betId++) {
+    for (uint64_t betId = s.m_FirstUnresolvedBetId; betId < s.m_NextBetId && resolved < maxCount && scanned < maxScan; betId++) {
+        scanned++;
         BeamBet::BetKey bk;
         bk.m_BetId = betId;
 
         BeamBet::Bet b;
         if (!Env::LoadVar_T(bk, b)) continue;
         if (b.m_Status != BeamBet::BetStatus::Pending) continue;
-        if (hCurrent < b.m_CreatedHeight + s.m_RevealEpoch) break; // Bets are sequential — if this one isn't expired, later ones can't be either
+        if (hCurrent < b.m_RevealAt) break; // Bets are sequential — if this one isn't expired, later ones can't be either
 
-        Height revealHeight = b.m_CreatedHeight + s.m_RevealEpoch;
+        Height revealHeight = b.m_RevealAt;
         uint8_t result = BeamBet::CalculateRandomResult(b.m_PlacementHash, revealHeight, b.m_BetId);
         BeamBet::ProcessBetResult(b, result, s);
 

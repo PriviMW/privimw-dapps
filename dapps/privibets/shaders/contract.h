@@ -4,7 +4,7 @@
 namespace BeamBet {
 
 // Shader ID (hash of compiled contract.wasm) - update after each recompile
-static const ShaderID s_SID = {0xab,0x19,0x5e,0xe7,0x2a,0xe3,0xe5,0xdd,0xeb,0x24,0xb0,0x58,0xde,0x2b,0x5a,0x29,0x68,0xda,0x9e,0x0f,0x83,0xd2,0x71,0x65,0x24,0x59,0xef,0x41,0xee,0x60,0x1c,0xbf};
+static const ShaderID s_SID = {0xe1,0x55,0xd0,0x48,0x1a,0x8d,0x96,0x29,0xf5,0x32,0x66,0xe5,0x71,0x74,0x9f,0x77,0x33,0x5d,0x3c,0x6c,0xb2,0xa7,0x67,0xc0,0x8a,0x14,0x0a,0xc1,0x0b,0xe7,0x0a,0x26};
 
 // Constants
 static const uint64_t s_DefaultMinBet = 1000000ULL;      // 0.01 BEAM
@@ -32,7 +32,8 @@ struct State {
     uint64_t m_UpDownMult;      // Up/Down multiplier (x100 scale, 190 = 1.9x)
     uint64_t m_ExactMult;       // Exact number multiplier (x100 scale, 280 = 2.8x)
     AssetID m_AssetId;          // Asset ID (0 = BEAM)
-    uint64_t m_TotalDeposited;  // Total owner deposits (cumulative)
+    uint64_t m_TotalDeposited;  // Total owner deposits (cumulative, never decreases)
+    uint64_t m_TotalWithdrawn;  // Total owner withdrawals (cumulative, never decreases)
     uint64_t m_TotalBets;       // Total user bets received (cumulative)
     uint64_t m_TotalPayouts;    // Total payouts made to users (cumulative)
     uint64_t m_PendingBets;     // Sum of locked amounts for pending bets
@@ -59,6 +60,7 @@ struct Bet {
     uint64_t m_Multiplier;      // Multiplier locked at placement (x100 scale)
     uint64_t m_MaxPayout;       // Worst-case payout reserved at placement
     uint64_t m_CreatedHeight;   // Block height when bet was placed
+    Height m_RevealAt;          // Block height when result can be revealed (computed at placement)
     uint64_t m_RevealedHeight;  // Block height when result was revealed
     HashValue m_PlacementHash;  // Block hash at bet placement (entropy the user cannot predict)
 };
