@@ -789,6 +789,37 @@ bool DocGetTextOrHex(const char* key, char* szOut, uint32_t maxLen)
     return o > 0;
 }
 
+// Try to read blob from "key" first, then fall back to "key_hex" (hex-encoded bytes).
+// Returns number of bytes read (>0) if either succeeds, 0 otherwise.
+uint32_t DocGetBlobOrHex(const char* key, uint8_t* out, uint32_t size)
+{
+    uint32_t n = Env::DocGetBlob(key, out, size);
+    if (n > 0) return n;
+
+    // Try hex variant: "key_hex"
+    char hexKey[48];
+    uint32_t keyLen = 0;
+    while (key[keyLen] && keyLen < 40) { hexKey[keyLen] = key[keyLen]; keyLen++; }
+    hexKey[keyLen] = '_'; hexKey[keyLen+1] = 'h'; hexKey[keyLen+2] = 'e'; hexKey[keyLen+3] = 'x'; hexKey[keyLen+4] = 0;
+
+    char hexBuf[256];
+    Env::Memset(hexBuf, 0, sizeof(hexBuf));
+    if (!Env::DocGetText(hexKey, hexBuf, sizeof(hexBuf)))
+        return 0;
+
+    // Decode hex -> raw bytes
+    Env::Memset(out, 0, size);
+    uint32_t i = 0, o = 0;
+    while (hexBuf[i] && hexBuf[i+1] && o < size) {
+        uint8_t hi = HexDigit(hexBuf[i]);
+        uint8_t lo = HexDigit(hexBuf[i+1]);
+        if (hi == 0xFF || lo == 0xFF) break;
+        out[o++] = (uint8_t)((hi << 4) | lo);
+        i += 2;
+    }
+    return o;
+}
+
 // ============================================================================
 // User handlers — Group TX actions
 // ============================================================================
@@ -813,8 +844,8 @@ void On_create_group(const ContractID& cid)
     Env::DocGet("max_members", args.m_MaxMembers);
     Env::DocGet("default_permissions", args.m_DefaultPermissions);
 
-    // Optional join password for private groups (32 raw bytes)
-    Env::DocGetBlob("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
+    // Optional join password for private groups (32 raw bytes, supports hex fallback)
+    DocGetBlobOrHex("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
 
     // Generate nonce from current height for unique group_id
     Height h = Env::get_Height();
@@ -835,8 +866,8 @@ void On_join_group(const ContractID& cid)
 
     if (!DocGetGroupId(args.m_GroupId)) return;
 
-    // Optional join password for private groups
-    Env::DocGetBlob("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
+    // Optional join password for private groups (supports hex fallback)
+    DocGetBlobOrHex("join_password", args.m_JoinPassword, sizeof(args.m_JoinPassword));
 
     UserKey uk(cid);
     uk.DerivePk(args.m_UserPk);
