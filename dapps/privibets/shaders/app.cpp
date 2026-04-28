@@ -42,6 +42,41 @@ struct HistSlot {
 };
 static const uint32_t MAX_HISTORY = 50;
 
+// Simple string helpers for kernel descriptions
+static void StrCopy(char* dst, uint32_t dstSize, const char* src) {
+    uint32_t i = 0;
+    while (src[i] && i < dstSize - 1) { dst[i] = src[i]; i++; }
+    dst[i] = 0;
+}
+
+static void AppendStr(char* dst, uint32_t dstSize, const char* src) {
+    uint32_t d = 0;
+    while (dst[d] && d < dstSize) d++;
+    uint32_t i = 0;
+    while (src[i] && d < dstSize - 1) { dst[d++] = src[i++]; }
+    dst[d] = 0;
+}
+
+static void UIntToStr(uint32_t val, char* buf, uint32_t maxLen) {
+    if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
+    char temp[16];
+    int i = 0;
+    while (val > 0 && i < 15) { temp[i++] = '0' + (val % 10); val /= 10; }
+    int j = 0;
+    while (i > 0 && j < maxLen - 1) { buf[j++] = temp[--i]; }
+    buf[j] = 0;
+}
+
+static void U64ToStr(uint64_t val, char* buf, uint32_t maxLen) {
+    if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
+    char temp[24];
+    int i = 0;
+    while (val > 0 && i < 23) { temp[i++] = '0' + (val % 10); val /= 10; }
+    int j = 0;
+    while (i > 0 && j < maxLen - 1) { buf[j++] = temp[--i]; }
+    buf[j] = 0;
+}
+
 // ============================================================================
 // Schema: Method_0
 // ============================================================================
@@ -262,17 +297,18 @@ void On_place_bet(const ContractID& cid)
 
     // nCharge covers: state load/save + bet save + FundsLock + get_Height/get_HdrInfo
     // + AutoResolveExpired (scan up to 20, resolve up to 5) + AdvanceFirstUnresolved (10 loads)
-    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "Dice: place bet", 800000);
+    Env::GenerateKernel(&cid, BeamBet::Method::PlaceBet::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "Dice: place bet", 600000);
 }
 
+// Claim all claimable bets by generating one CheckSingleResult kernel per bet.
+// BVM cost is O(claims), not O(total contract size), because each kernel loads one bet by ID.
 void On_check_results(const ContractID& cid)
 {
-    BeamBet::Method::CheckResults args;
-
     UserKey uk;
     _POD_(uk).SetZero();
     uk.m_Cid = cid;
-    uk.DerivePk(args.m_UserPk);
+    PubKey userPk;
+    uk.DerivePk(userPk);
 
     Env::Key_T<BeamBet::StateKey> sk;
     sk.m_Prefix.m_Cid = cid;
@@ -285,12 +321,14 @@ void On_check_results(const ContractID& cid)
     }
 
     Height hCurrent = Env::get_Height();
-    uint64_t totalPayout = 0;
-    uint32_t processedCount = 0;
 
-    // Batch range scan from 0 (not FirstUnresolvedBetId) to find Won-but-unclaimed entries
-    // that the cursor may have advanced past. Max 500 entries scanned to bound charge cost.
+    // Client-side scan: find all claimable bets for this user (free, not on-chain).
     static const uint32_t s_MaxScan = 500;
+    static const uint32_t s_MaxClaims = 100;
+    uint64_t claimableIds[100];
+    uint64_t payouts[100];
+    uint32_t claimableCount = 0;
+
     if (s.m_NextBetId > 0)
     {
         Env::Key_T<BeamBet::BetKey> k0, k1;
@@ -303,10 +341,10 @@ void On_check_results(const ContractID& cid)
         Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
         uint32_t scanned = 0;
-        while (scanner.MoveNext_T(key, b) && processedCount < 100 && scanned < s_MaxScan)
+        while (scanner.MoveNext_T(key, b) && claimableCount < s_MaxClaims && scanned < s_MaxScan)
         {
             scanned++;
-            if (_POD_(b.m_UserPk) != args.m_UserPk) continue;
+            if (_POD_(b.m_UserPk) != userPk) continue;
 
             if (b.m_Status == BeamBet::BetStatus::Pending)
             {
@@ -329,44 +367,53 @@ void On_check_results(const ContractID& cid)
                     case 2: won = (result == b.m_ExactNumber); break;
                 }
 
-                if (won) {
-                    totalPayout += (b.m_Amount * b.m_Multiplier) / 100;
-                }
+                claimableIds[claimableCount] = b.m_BetId;
+                payouts[claimableCount] = won ? (b.m_Amount * b.m_Multiplier) / 100 : 0;
+                claimableCount++;
             }
             else if (b.m_Status == BeamBet::BetStatus::Won && b.m_Payout > 0)
             {
-                totalPayout += b.m_Payout;
+                claimableIds[claimableCount] = b.m_BetId;
+                payouts[claimableCount] = b.m_Payout;
+                claimableCount++;
             }
-            else
-            {
-                continue;
-            }
-
-            processedCount++;
         }
     }
 
-    // User must sign to prove ownership (matches AddSig in contract)
+    if (claimableCount == 0)
+    {
+        OnError("No bets to claim");
+        return;
+    }
+
     Env::KeyID kid(&uk, sizeof(uk));
 
-    // Dynamic charge: base overhead + per-bet cost (LoadVar + SHA256 + SaveVar)
-    // Base: state load/save + AddSig + FundsUnlock + scan up to 500 entries ≈ 2M
-    // Per bet: LoadVar(Bet) + SHA256 + SaveVar(Bet) ≈ 50K
-    // Note: scans from 0 to find Won entries before cursor (max 500 entries scanned)
-    uint32_t nCharge = 2000000 + processedCount * 50000;
-    if (nCharge < 600000) nCharge = 600000;   // Floor for minimal overhead
+    // One kernel per bet using Method_9 (CheckSingleResult). BVM cost is O(1) per kernel.
+    for (uint32_t i = 0; i < claimableCount; i++)
+    {
+        BeamBet::Method::CheckSingleResult args;
+        args.m_BetId = claimableIds[i];
+        _POD_(args.m_UserPk) = userPk;
 
-    if (totalPayout > 0)
-    {
-        FundsChange fc;
-        fc.m_Aid = s.m_AssetId;
-        fc.m_Amount = totalPayout;
-        fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: check results", nCharge);
-    }
-    else
-    {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: check results", nCharge);
+        // Build per-bet description so wallet shows unique text per kernel
+        char idStr[24];
+        U64ToStr(claimableIds[i], idStr, sizeof(idStr));
+        char desc[64] = {0};
+        StrCopy(desc, sizeof(desc), "Dice: claim bet #");
+        AppendStr(desc, sizeof(desc), idStr);
+
+        if (payouts[i] > 0)
+        {
+            FundsChange fc;
+            fc.m_Aid = s.m_AssetId;
+            fc.m_Amount = payouts[i];
+            fc.m_Consume = 0;
+            Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, desc, 250000);
+        }
+        else
+        {
+            Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, desc, 250000);
+        }
     }
 }
 
@@ -857,11 +904,11 @@ void On_check_result(const ContractID& cid)
         fc.m_Aid = b.m_AssetId;  // Use bet's actual asset (matches contract Method_9)
         fc.m_Amount = payout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: check single result", 200000);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: check single result", 250000);
+        Env::GenerateKernel(&cid, BeamBet::Method::CheckSingleResult::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: check single result", 200000);
     }
 }
 
@@ -988,7 +1035,7 @@ void On_reveal_bet(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: reveal bet", 130000);
+    Env::GenerateKernel(&cid, BeamBet::Method::RevealBet::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: reveal bet", 200000);
 }
 
 void On_resolve_bets(const ContractID& cid)
@@ -1001,7 +1048,7 @@ void On_resolve_bets(const ContractID& cid)
 
     // Dynamic charge: base covers state + AdvanceFirstUnresolved(50), per-bet covers LoadVar + SHA256 + SaveVar
     // Extra margin for scanning past non-Pending entries (maxScan = maxCount + 50)
-    uint32_t nCharge = 900000 + tempCount * 50000;
+    uint32_t nCharge = 1500000 + tempCount * 50000;
 
     // No FundsChange needed - resolve_bets only reveals results, no payouts
     Env::GenerateKernel(&cid, BeamBet::Method::ResolveExpiredBets::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "Dice: resolve expired bets", nCharge);
@@ -1030,7 +1077,7 @@ void On_deposit(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: deposit", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: deposit", 55000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -1056,7 +1103,7 @@ void On_withdraw(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: withdraw", 75000);
+    Env::GenerateKernel(&cid, BeamBet::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Dice: withdraw", 55000);
 }
 
 void On_set_owner(const ContractID& cid)
@@ -1067,7 +1114,7 @@ void On_set_owner(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set owner", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set owner", 55000);
 }
 
 void On_set_config(const ContractID& cid)
@@ -1088,7 +1135,7 @@ void On_set_config(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set config", 70000);
+    Env::GenerateKernel(&cid, BeamBet::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Dice: set config", 55000);
 }
 
 // ============================================================================

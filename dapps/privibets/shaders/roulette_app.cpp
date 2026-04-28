@@ -85,6 +85,41 @@ static bool IsBetWon(uint8_t betType, uint8_t betNumber, uint8_t result) {
     }
 }
 
+// Simple string helpers for kernel descriptions
+static void StrCopy(char* dst, uint32_t dstSize, const char* src) {
+    uint32_t i = 0;
+    while (src[i] && i < dstSize - 1) { dst[i] = src[i]; i++; }
+    dst[i] = 0;
+}
+
+static void AppendStr(char* dst, uint32_t dstSize, const char* src) {
+    uint32_t d = 0;
+    while (dst[d] && d < dstSize) d++;
+    uint32_t i = 0;
+    while (src[i] && d < dstSize - 1) { dst[d++] = src[i++]; }
+    dst[d] = 0;
+}
+
+static void UIntToStr(uint32_t val, char* buf, uint32_t maxLen) {
+    if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
+    char temp[16];
+    int i = 0;
+    while (val > 0 && i < 15) { temp[i++] = '0' + (val % 10); val /= 10; }
+    int j = 0;
+    while (i > 0 && j < maxLen - 1) { buf[j++] = temp[--i]; }
+    buf[j] = 0;
+}
+
+static void U64ToStr(uint64_t val, char* buf, uint32_t maxLen) {
+    if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
+    char temp[24];
+    int i = 0;
+    while (val > 0 && i < 23) { temp[i++] = '0' + (val % 10); val /= 10; }
+    int j = 0;
+    while (i > 0 && j < maxLen - 1) { buf[j++] = temp[--i]; }
+    buf[j] = 0;
+}
+
 // Compact spin history entry for circular buffer
 struct SpinHistSlot {
     uint64_t spinId, totalWagered, totalPayout, createdHeight;
@@ -408,19 +443,20 @@ void On_place_bets(const ContractID& cid)
 
     // nCharge: state load/save + spin save + FundsLock + get_Height/get_HdrInfo + per-position validation
     // + AutoResolveExpired (scan up to 20, resolve up to 5, Spin=~436 bytes) + AdvanceFirstUnresolved (10 loads)
-    uint32_t nCharge = 1100000 + numBets * 30000;
+    uint32_t nCharge = 1000000 + numBets * 30000;
 
     Env::GenerateKernel(&cid, BeamRoulette::Method::PlaceBets::s_iMethod, &args, sizeof(args), &fc, 1, nullptr, 0, "Roulette: place bets", nCharge);
 }
 
+// Claim all claimable spins by generating one CheckSingleSpin kernel per spin.
+// BVM cost is O(claims), not O(total contract size), because each kernel loads one spin by ID.
 void On_check_results(const ContractID& cid)
 {
-    BeamRoulette::Method::CheckResults args;
-
     UserKey uk;
     _POD_(uk).SetZero();
     uk.m_Cid = cid;
-    uk.DerivePk(args.m_UserPk);
+    PubKey userPk;
+    uk.DerivePk(userPk);
 
     Env::Key_T<BeamRoulette::StateKey> sk;
     sk.m_Prefix.m_Cid = cid;
@@ -433,13 +469,14 @@ void On_check_results(const ContractID& cid)
     }
 
     Height hCurrent = Env::get_Height();
-    uint64_t totalPayout = 0;
-    uint32_t processedCount = 0;
 
-    // Pre-scan to estimate payout for FundsChange
-    // Scan from 1 (not FirstUnresolvedSpinId) to find Won-but-unclaimed spins
-    // that the cursor may have advanced past. Max 500 entries scanned to bound charge cost.
+    // Client-side scan: find all claimable spins for this user (free, not on-chain).
     static const uint32_t s_MaxScan = 500;
+    static const uint32_t s_MaxClaims = 50;
+    uint64_t claimableIds[50];
+    uint64_t payouts[50];
+    uint32_t claimableCount = 0;
+
     if (s.m_NextSpinId > 1)
     {
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
@@ -452,56 +489,80 @@ void On_check_results(const ContractID& cid)
         Env::Key_T<BeamRoulette::SpinKey> key;
         BeamRoulette::Spin spin;
         uint32_t scanned = 0;
-        while (scanner.MoveNext_T(key, spin) && processedCount < 50 && scanned < s_MaxScan)
+        while (scanner.MoveNext_T(key, spin) && claimableCount < s_MaxClaims && scanned < s_MaxScan)
         {
             scanned++;
-            if (_POD_(spin.m_UserPk) != args.m_UserPk) continue;
+            if (_POD_(spin.m_UserPk) != userPk) continue;
 
             if (spin.m_Status == BeamRoulette::SpinStatus::Pending)
             {
                 if (hCurrent < spin.m_RevealAt) continue;
-
-                uint8_t result = CalculateSpinResult(spin.m_PlacementHash, spin.m_RevealAt, spin.m_SpinId);
-
-                for (uint8_t i = 0; i < spin.m_NumBets; i++) {
-                    const BeamRoulette::BetPosition& bp = spin.m_Bets[i];
-                    if (IsBetWon(bp.m_Type, bp.m_Number, result)) {
-                        totalPayout += (bp.m_Amount * bp.m_Multiplier) / 100;
-                    }
-                }
             }
-            else if (spin.m_Status == BeamRoulette::SpinStatus::Won && spin.m_TotalPayout > 0)
+            else if (spin.m_Status == BeamRoulette::SpinStatus::Won)
             {
-                totalPayout += spin.m_TotalPayout;
+                // Already revealed, just needs claim
             }
             else
             {
-                continue;
+                continue; // Lost or already Claimed
             }
 
-            processedCount++;
+            uint64_t payout = 0;
+            if (spin.m_Status == BeamRoulette::SpinStatus::Pending)
+            {
+                uint8_t result = CalculateSpinResult(spin.m_PlacementHash, spin.m_RevealAt, spin.m_SpinId);
+                for (uint8_t i = 0; i < spin.m_NumBets; i++) {
+                    const BeamRoulette::BetPosition& bp = spin.m_Bets[i];
+                    if (IsBetWon(bp.m_Type, bp.m_Number, result)) {
+                        payout += (bp.m_Amount * bp.m_Multiplier) / 100;
+                    }
+                }
+            }
+            else
+            {
+                payout = spin.m_TotalPayout;
+            }
+
+            claimableIds[claimableCount] = spin.m_SpinId;
+            payouts[claimableCount] = payout;
+            claimableCount++;
         }
+    }
+
+    if (claimableCount == 0)
+    {
+        OnError("No spins to claim");
+        return;
     }
 
     Env::KeyID kid(&uk, sizeof(uk));
 
-    // Dynamic charge: base + per-spin cost (Spin struct is large: LoadVar + SHA256 + 10 bet checks + SaveVar)
-    // Base covers scan up to 500 entries + state load/save + AddSig + FundsUnlock + AdvanceFirstUnresolved
-    // Note: scans from 1 to find Won entries before cursor (max 500 entries scanned)
-    uint32_t nCharge = 2500000 + processedCount * 100000;
-    if (nCharge < 600000) nCharge = 600000;
+    // One kernel per spin using Method_9 (CheckSingleSpin). BVM cost is O(1) per kernel.
+    for (uint32_t i = 0; i < claimableCount; i++)
+    {
+        BeamRoulette::Method::CheckSingleSpin args;
+        args.m_SpinId = claimableIds[i];
+        _POD_(args.m_UserPk) = userPk;
 
-    if (totalPayout > 0)
-    {
-        FundsChange fc;
-        fc.m_Aid = s.m_AssetId;
-        fc.m_Amount = totalPayout;
-        fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckResults::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: check results", nCharge);
-    }
-    else
-    {
-        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckResults::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: check results", nCharge);
+        // Build per-spin description so wallet shows unique text per kernel
+        char idStr[24];
+        U64ToStr(claimableIds[i], idStr, sizeof(idStr));
+        char desc[64] = {0};
+        StrCopy(desc, sizeof(desc), "Roulette: claim spin #");
+        AppendStr(desc, sizeof(desc), idStr);
+
+        if (payouts[i] > 0)
+        {
+            FundsChange fc;
+            fc.m_Aid = s.m_AssetId;
+            fc.m_Amount = payouts[i];
+            fc.m_Consume = 0;
+            Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, desc, 500000);
+        }
+        else
+        {
+            Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, desc, 500000);
+        }
     }
 }
 
@@ -579,11 +640,11 @@ void On_check_single(const ContractID& cid)
         fc.m_Aid = s.m_AssetId;
         fc.m_Amount = payout;
         fc.m_Consume = 0;
-        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: check single spin", 500000);
+        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: check single spin", 450000);
     }
     else
     {
-        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: check single spin", 500000);
+        Env::GenerateKernel(&cid, BeamRoulette::Method::CheckSingleSpin::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: check single spin", 450000);
     }
 }
 
@@ -1060,7 +1121,7 @@ void On_reveal_spin(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamRoulette::Method::RevealSpin::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: reveal spin", 300000);
+    Env::GenerateKernel(&cid, BeamRoulette::Method::RevealSpin::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: reveal spin", 450000);
 }
 
 void On_resolve_spins(const ContractID& cid)
@@ -1073,7 +1134,7 @@ void On_resolve_spins(const ContractID& cid)
 
     // Dynamic charge: Spin structs are large, per-spin cost is higher than d100
     // Extra margin for scanning past non-Pending entries (maxScan = maxCount + 50)
-    uint32_t nCharge = 1200000 + tempCount * 100000;
+    uint32_t nCharge = 2000000 + tempCount * 100000;
 
     Env::GenerateKernel(&cid, BeamRoulette::Method::ResolveExpiredSpins::s_iMethod, &args, sizeof(args), nullptr, 0, nullptr, 0, "Roulette: resolve expired spins", nCharge);
 }
@@ -1101,7 +1162,7 @@ void On_deposit(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamRoulette::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: deposit", 75000);
+    Env::GenerateKernel(&cid, BeamRoulette::Method::Deposit::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: deposit", 55000);
 }
 
 void On_withdraw(const ContractID& cid)
@@ -1127,7 +1188,7 @@ void On_withdraw(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamRoulette::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: withdraw", 75000);
+    Env::GenerateKernel(&cid, BeamRoulette::Method::Withdraw::s_iMethod, &args, sizeof(args), &fc, 1, &kid, 1, "Roulette: withdraw", 55000);
 }
 
 void On_set_owner(const ContractID& cid)
@@ -1138,7 +1199,7 @@ void On_set_owner(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamRoulette::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: set owner", 70000);
+    Env::GenerateKernel(&cid, BeamRoulette::Method::SetOwner::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: set owner", 55000);
 }
 
 void On_set_config(const ContractID& cid)
@@ -1160,7 +1221,7 @@ void On_set_config(const ContractID& cid)
     OwnerKey ok;
     Env::KeyID kid(&ok, sizeof(ok));
 
-    Env::GenerateKernel(&cid, BeamRoulette::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: set config", 70000);
+    Env::GenerateKernel(&cid, BeamRoulette::Method::SetConfig::s_iMethod, &args, sizeof(args), nullptr, 0, &kid, 1, "Roulette: set config", 55000);
 }
 
 // ============================================================================
