@@ -35,12 +35,11 @@ struct UserKey {
     }
 };
 
-// Compact history entry for circular buffer (used by view_all and result_history)
+// Compact history entry (used by view_all and result_history)
 struct HistSlot {
     uint64_t betId, amount, payout, createdHeight, revealedHeight;
     uint32_t type, exactNumber, result, status;
 };
-static const uint32_t MAX_HISTORY = 50;
 
 // Simple string helpers for kernel descriptions
 static void StrCopy(char* dst, uint32_t dstSize, const char* src) {
@@ -528,18 +527,18 @@ void On_result_history(const ContractID& cid)
         return;
     }
 
-    // Batch range scan with circular buffer for last 50 entries (newest first)
-    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_HISTORY);
-    uint32_t histCount = 0, histWrite = 0;
+    // Full scan — no cap, collect all resolved bets for this user
+    // Use nextBetId as upper bound for buffer size
+    uint32_t maxSlots = (s.m_NextBetId > 0) ? (uint32_t)s.m_NextBetId : 1;
+    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * maxSlots);
+    uint32_t histCount = 0;
 
     if (s.m_NextBetId > 0)
     {
-        // Optimization: only scan last 500 bets for history (circular buffer keeps 50)
-        uint64_t startId = (s.m_NextBetId > 500) ? (s.m_NextBetId - 500) : 0;
-
+        // Scan from 0 for full user history
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_BetId = startId;
+        k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
         k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
 
@@ -551,7 +550,7 @@ void On_result_history(const ContractID& cid)
             if (_POD_(b.m_UserPk) != userPk) continue;
             if (b.m_Status == BeamBet::BetStatus::Pending) continue;
 
-            HistSlot& h = histBuf[histWrite];
+            HistSlot& h = histBuf[histCount++];
             h.betId = b.m_BetId;
             h.amount = b.m_Amount;
             h.type = (uint32_t)b.m_Type;
@@ -561,17 +560,14 @@ void On_result_history(const ContractID& cid)
             h.payout = b.m_Payout;
             h.createdHeight = b.m_CreatedHeight;
             h.revealedHeight = b.m_RevealedHeight;
-            histWrite = (histWrite + 1) % MAX_HISTORY;
-            if (histCount < MAX_HISTORY) histCount++;
         }
     }
 
-    // Output newest first
+    // Output newest first (reverse order)
     Env::DocArray gr("history");
     for (uint32_t i = 0; i < histCount; i++)
     {
-        uint32_t idx = (histWrite + MAX_HISTORY - 1 - i) % MAX_HISTORY;
-        HistSlot& h = histBuf[idx];
+        HistSlot& h = histBuf[histCount - 1 - i];
 
         Env::DocGroup betGr("");
         Env::DocAddNum("bet_id", h.betId);
@@ -652,23 +648,25 @@ void On_view_all(const ContractID& cid)
     Height currentHeight = Env::get_Height();
 
     // === SINGLE RANGE SCAN for pending bets, unclaimed wins, and history ===
-    // One Vars_Enum call instead of N individual Read_T calls (O(1) vs O(N) node round-trips)
-    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_HISTORY);
-    uint32_t histCount = 0, histWrite = 0;
+    // One Vars_Enum call — no cap on history, full user history
 
-    // Separate buffer for unclaimed wins — NOT in circular buffer so they never get lost
+    // Separate buffer for unclaimed wins — NOT capped so they never get lost
     static const uint32_t MAX_UNCLAIMED = 100;
     HistSlot* unclaimedBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * MAX_UNCLAIMED);
     uint32_t unclaimedCount = 0;
+
+    // History buffer — sized by total bet count (upper bound for user's bets)
+    uint32_t maxHistSlots = (s.m_NextBetId > 0) ? (uint32_t)s.m_NextBetId : 1;
+    HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * maxHistSlots);
+    uint32_t histCount = 0;
 
     {
         Env::DocArray gr("bets");
         if (s.m_NextBetId > 0)
         {
-            // Start from whichever is earlier: FirstUnresolved (for pending/unclaimed)
-            // or last 500 bets (for history circular buffer)
-            uint64_t histStart = (s.m_NextBetId > 500) ? (s.m_NextBetId - 500) : 0;
-            uint64_t startId = (s.m_FirstUnresolvedBetId < histStart) ? s.m_FirstUnresolvedBetId : histStart;
+            // Start from FirstUnresolvedBetId for pending/unclaimed,
+            // but scan from 0 for full history
+            uint64_t startId = 0;
 
             Env::Key_T<BeamBet::BetKey> k0, k1;
             k0.m_Prefix.m_Cid = cid;
@@ -729,7 +727,7 @@ void On_view_all(const ContractID& cid)
                 }
                 else if (b.m_Status == BeamBet::BetStatus::Won)
                 {
-                    // Unclaimed win — buffer separately (never lost to circular overflow)
+                    // Unclaimed win — buffer separately
                     if (unclaimedCount < MAX_UNCLAIMED)
                     {
                         HistSlot& u = unclaimedBuf[unclaimedCount++];
@@ -746,8 +744,8 @@ void On_view_all(const ContractID& cid)
                 }
                 else
                 {
-                    // Lost/Claimed — circular buffer for history (keeps last 50)
-                    HistSlot& h = histBuf[histWrite];
+                    // Lost/Claimed — add to history buffer (no cap)
+                    HistSlot& h = histBuf[histCount++];
                     h.betId = b.m_BetId;
                     h.amount = b.m_Amount;
                     h.type = (uint32_t)b.m_Type;
@@ -757,8 +755,6 @@ void On_view_all(const ContractID& cid)
                     h.payout = b.m_Payout;
                     h.createdHeight = b.m_CreatedHeight;
                     h.revealedHeight = b.m_RevealedHeight;
-                    histWrite = (histWrite + 1) % MAX_HISTORY;
-                    if (histCount < MAX_HISTORY) histCount++;
                 }
             }
         }
@@ -784,13 +780,12 @@ void On_view_all(const ContractID& cid)
         }
     }
 
-    // === RESULT HISTORY — output from circular buffer, newest first ===
+    // === RESULT HISTORY — output newest first (reverse order) ===
     {
         Env::DocArray gr("history");
         for (uint32_t i = 0; i < histCount; i++)
         {
-            uint32_t idx = (histWrite + MAX_HISTORY - 1 - i) % MAX_HISTORY;
-            HistSlot& h = histBuf[idx];
+            HistSlot& h = histBuf[histCount - 1 - i];
 
             Env::DocGroup betGr("");
             Env::DocAddNum("bet_id", h.betId);

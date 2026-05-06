@@ -120,7 +120,7 @@ static void U64ToStr(uint64_t val, char* buf, uint32_t maxLen) {
     buf[j] = 0;
 }
 
-// Compact spin history entry for circular buffer
+// Compact spin history entry (used by view_all)
 struct SpinHistSlot {
     uint64_t spinId, totalWagered, totalPayout, createdHeight;
     uint32_t numBets, result, status;
@@ -128,7 +128,6 @@ struct SpinHistSlot {
     uint8_t betNumbers[10]; // Straight number per position
     uint8_t betWon[10];     // Won flag per position
 };
-static const uint32_t MAX_HISTORY = 50;
 
 // Compact unclaimed spin entry
 struct UnclaimedSlot {
@@ -799,8 +798,10 @@ void On_view_all(const ContractID& cid)
     Height currentHeight = Env::get_Height();
 
     // Allocate history and unclaimed buffers
-    SpinHistSlot* histBuf = (SpinHistSlot*) Env::Heap_Alloc(sizeof(SpinHistSlot) * MAX_HISTORY);
-    uint32_t histCount = 0, histWrite = 0;
+    // History: no cap, sized by total spin count (upper bound for user's spins)
+    uint32_t maxHistSlots = (s.m_NextSpinId > 0) ? (uint32_t)s.m_NextSpinId : 1;
+    SpinHistSlot* histBuf = (SpinHistSlot*) Env::Heap_Alloc(sizeof(SpinHistSlot) * maxHistSlots);
+    uint32_t histCount = 0;
 
     // For unclaimed — store spin IDs, wagered, payout (details come from re-reading)
     uint64_t* unclaimedIds = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * MAX_UNCLAIMED);
@@ -811,8 +812,8 @@ void On_view_all(const ContractID& cid)
         Env::DocArray gr("pending");
         if (s.m_NextSpinId > 0)
         {
-            uint64_t histStart = (s.m_NextSpinId > 500) ? (s.m_NextSpinId - 500) : 1;
-            uint64_t startId = (s.m_FirstUnresolvedSpinId < histStart) ? s.m_FirstUnresolvedSpinId : histStart;
+            // Scan from 1 for full user history
+            uint64_t startId = 1;
             if (startId < 1) startId = 1;
 
             Env::Key_T<BeamRoulette::SpinKey> k0, k1;
@@ -878,8 +879,8 @@ void On_view_all(const ContractID& cid)
                 }
                 else
                 {
-                    // Lost/Claimed — circular buffer
-                    SpinHistSlot& h = histBuf[histWrite];
+                    // Lost/Claimed — add to history buffer (no cap)
+                    SpinHistSlot& h = histBuf[histCount++];
                     h.spinId = spin.m_SpinId;
                     h.totalWagered = spin.m_TotalWagered;
                     h.totalPayout = spin.m_TotalPayout;
@@ -899,8 +900,6 @@ void On_view_all(const ContractID& cid)
                             h.betWon[bi] = 0;
                         }
                     }
-                    histWrite = (histWrite + 1) % MAX_HISTORY;
-                    if (histCount < MAX_HISTORY) histCount++;
                 }
             }
         }
@@ -929,13 +928,12 @@ void On_view_all(const ContractID& cid)
         }
     }
 
-    // === HISTORY — output from circular buffer, newest first ===
+    // === HISTORY — output newest first (reverse order) ===
     {
         Env::DocArray gr("history");
         for (uint32_t i = 0; i < histCount; i++)
         {
-            uint32_t idx = (histWrite + MAX_HISTORY - 1 - i) % MAX_HISTORY;
-            SpinHistSlot& h = histBuf[idx];
+            SpinHistSlot& h = histBuf[histCount - 1 - i];
 
             Env::DocGroup spinGr("");
             Env::DocAddNum("spin_id", h.spinId);
