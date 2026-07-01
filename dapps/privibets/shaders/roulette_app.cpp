@@ -117,6 +117,44 @@ static void U64ToStr(uint64_t val, char* buf, uint32_t maxLen) {
     buf[j] = 0;
 }
 
+// ----------------------------------------------------------------------------
+// Range-scan ordering note (CRITICAL):
+// SpinKey.m_SpinId is stored as a native (little-endian) uint64. Env::VarReader
+// enumerates keys in LEXICOGRAPHIC byte order, which does NOT match numeric
+// order once spinId >= 256. For spinIds 1..N the lexicographic sequence is
+// 1, 257, 2, 258, ... 256, 512, ...
+//
+// Consequence: a numeric upper bound of (NextSpinId - 1) is WRONG. When NextSpinId
+// crosses 256, spinIds 11..255 (LE bytes 0B 00..FF 00) are lexicographically
+// GREATER than the bound's LE bytes (e.g. 0A 01 for 266) and are excluded from
+// the scan. A numeric LOWER bound > 0 (FirstUnresolvedSpinId) is equally wrong:
+// spinIds 256+ (LE 00 01..) are lexicographically LESS than e.g. 01 00 and get
+// excluded. Both silently drop spins past 256 — breaking views, leaderboards,
+// and claim-all (a fund-access bug). Single-spin exact-key reads (Read_T by id)
+// are NOT affected.
+//
+// Fix: always scan the FULL lexicographic range [0, UINT64_MAX] (0 is the
+// lex-min, UINT64_MAX the lex-max — together cover every existing spin key),
+// filter in code, and sort results by spinId before output. Because the Spin
+// struct is large (~700 bytes with BetPosition[20]), we buffer spin IDs (not
+// full Spins) and re-read each by exact key in sorted order — heap-light and
+// safe at scale. History uses the compact SpinHistSlot buffer (one read each).
+// ----------------------------------------------------------------------------
+static const uint64_t s_MaxSpinIdBound = static_cast<uint64_t>(-1);
+
+// Insertion sort uint64 array ascending (small N, no STL dependency).
+static void SortU64Asc(uint64_t* arr, uint32_t n) {
+    for (uint32_t i = 1; i < n; i++) {
+        uint64_t cur = arr[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && arr[(uint32_t)j] > cur) {
+            arr[(uint32_t)j + 1] = arr[(uint32_t)j];
+            j--;
+        }
+        arr[(uint32_t)j + 1] = cur;
+    }
+}
+
 // Compact spin history entry (used by view_all)
 struct SpinHistSlot {
     uint64_t spinId, totalWagered, totalPayout, createdHeight;
@@ -125,6 +163,19 @@ struct SpinHistSlot {
     uint8_t betNumbers[BeamRoulette::s_MaxBetsPerSpin];
     uint8_t betWon[BeamRoulette::s_MaxBetsPerSpin];
 };
+
+// Insertion sort SpinHistSlot array ascending by spinId (defined after SpinHistSlot).
+static void SortSpinHistBySpinId(SpinHistSlot* arr, uint32_t n) {
+    for (uint32_t i = 1; i < n; i++) {
+        SpinHistSlot cur = arr[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && arr[(uint32_t)j].spinId > cur.spinId) {
+            arr[(uint32_t)j + 1] = arr[(uint32_t)j];
+            j--;
+        }
+        arr[(uint32_t)j + 1] = cur;
+    }
+}
 
 // Compact unclaimed spin entry
 struct UnclaimedSlot {
@@ -583,9 +634,9 @@ void On_check_results(const ContractID& cid)
     {
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_SpinId = 1;
+        k0.m_KeyInContract.m_SpinId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
+        k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamRoulette::SpinKey> key;
@@ -782,21 +833,41 @@ void On_my_spins(const ContractID& cid)
 
     Env::DocArray gr("spins");
 
-    if (s.m_FirstUnresolvedSpinId < s.m_NextSpinId)
+    // Full lexicographic range scan — see s_MaxSpinIdBound note above. Buffer the
+    // user's pending spin IDs, sort by spinId, then re-read each for output.
+    if (s.m_NextSpinId > 1)
     {
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_SpinId = s.m_FirstUnresolvedSpinId;
+        k0.m_KeyInContract.m_SpinId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
+        k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamRoulette::SpinKey> key;
         BeamRoulette::Spin spin;
+
+        uint32_t maxPending = (uint32_t)s.m_NextSpinId;
+        uint64_t* pendingIds = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * maxPending);
+        uint32_t pendingCount = 0;
+
         while (scanner.MoveNext_T(key, spin))
         {
             if (_POD_(spin.m_UserPk) != userPk) continue;
             if (spin.m_Status != BeamRoulette::SpinStatus::Pending) continue;
+            if (pendingCount < maxPending)
+                pendingIds[pendingCount++] = spin.m_SpinId;
+        }
+
+        SortU64Asc(pendingIds, pendingCount);
+
+        for (uint32_t pi = 0; pi < pendingCount; pi++)
+        {
+            Env::Key_T<BeamRoulette::SpinKey> rk;
+            rk.m_Prefix.m_Cid = cid;
+            rk.m_KeyInContract.m_SpinId = pendingIds[pi];
+            BeamRoulette::Spin spin;
+            if (!Env::VarReader::Read_T(rk, spin)) continue;
 
             uint64_t blocksRemaining = 0;
             if (spin.m_RevealAt > currentHeight)
@@ -839,6 +910,8 @@ void On_my_spins(const ContractID& cid)
                 Env::DocAddNum("preview_wins_count", winsCount);
             }
         }
+
+        Env::Heap_Free(pendingIds);
     }
 }
 
@@ -900,89 +973,49 @@ void On_view_all(const ContractID& cid)
 
     Height currentHeight = Env::get_Height();
 
-    // Allocate history and unclaimed buffers
-    // History: no cap, sized by total spin count (upper bound for user's spins)
+    // Allocate buffers. Full lexicographic range scan — see s_MaxSpinIdBound note
+    // above. Buffer spin IDs (pending/unclaimed) and compact history slots; sort
+    // each by spinId before output (scan order is non-numeric due to LE keys).
     uint32_t maxHistSlots = (s.m_NextSpinId > 0) ? (uint32_t)s.m_NextSpinId : 1;
     SpinHistSlot* histBuf = (SpinHistSlot*) Env::Heap_Alloc(sizeof(SpinHistSlot) * maxHistSlots);
     uint32_t histCount = 0;
 
-    // For unclaimed — store spin IDs, wagered, payout (details come from re-reading)
     uint64_t* unclaimedIds = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * MAX_UNCLAIMED);
     uint32_t unclaimedCount = 0;
 
-    // === PENDING SPINS (output directly) ===
+    uint64_t* pendingIds = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * maxHistSlots);
+    uint32_t pendingCount = 0;
+
+    if (s.m_NextSpinId > 1)
     {
-        Env::DocArray gr("pending");
-        if (s.m_NextSpinId > 0)
+        Env::Key_T<BeamRoulette::SpinKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_SpinId = 0;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
+
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamRoulette::SpinKey> key;
+        BeamRoulette::Spin spin;
+        while (scanner.MoveNext_T(key, spin))
         {
-            // Scan from 1 for full user history
-            uint64_t startId = 1;
-            if (startId < 1) startId = 1;
+            if (_POD_(spin.m_UserPk) != userPk) continue;
 
-            Env::Key_T<BeamRoulette::SpinKey> k0, k1;
-            k0.m_Prefix.m_Cid = cid;
-            k0.m_KeyInContract.m_SpinId = startId;
-            k1.m_Prefix.m_Cid = cid;
-            k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
-
-            Env::VarReader scanner(k0, k1);
-            Env::Key_T<BeamRoulette::SpinKey> key;
-            BeamRoulette::Spin spin;
-            while (scanner.MoveNext_T(key, spin))
+            if (spin.m_Status == BeamRoulette::SpinStatus::Pending)
             {
-                if (_POD_(spin.m_UserPk) != userPk) continue;
-
-                if (spin.m_Status == BeamRoulette::SpinStatus::Pending)
+                if (pendingCount < maxHistSlots)
+                    pendingIds[pendingCount++] = spin.m_SpinId;
+            }
+            else if (spin.m_Status == BeamRoulette::SpinStatus::Won)
+            {
+                if (unclaimedCount < MAX_UNCLAIMED)
+                    unclaimedIds[unclaimedCount++] = spin.m_SpinId;
+            }
+            else
+            {
+                // Lost/Claimed — add to history buffer (no cap)
+                if (histCount < maxHistSlots)
                 {
-                    uint64_t blocksRemaining = 0;
-                    if (spin.m_RevealAt > currentHeight)
-                        blocksRemaining = spin.m_RevealAt - currentHeight;
-
-                    Env::DocGroup spinGr("");
-                    Env::DocAddNum("spin_id", spin.m_SpinId);
-                    Env::DocAddNum("num_bets", (uint32_t)spin.m_NumBets);
-                    Env::DocAddNum("total_wagered", spin.m_TotalWagered);
-                    Env::DocAddNum("max_payout", spin.m_MaxPayout);
-                    Env::DocAddNum("created_height", spin.m_CreatedHeight);
-                    Env::DocAddNum("reveal_at", spin.m_RevealAt);
-                    Env::DocAddNum("blocks_remaining", blocksRemaining);
-                    Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
-
-                    OutputBetPositions(spin);
-
-                    // Preview result for ready spins
-                    if (blocksRemaining == 0) {
-                        uint8_t result = CalculateSpinResult(spin.m_PlacementHash, spin.m_RevealAt, spin.m_SpinId);
-                        Env::DocAddNum("preview_result", (uint32_t)result);
-
-                        uint64_t previewPayout = 0;
-                        uint32_t winsCount = 0;
-                        {
-                            Env::DocArray prevArr("preview_bets");
-                            for (uint8_t i = 0; i < spin.m_NumBets; i++) {
-                                const BeamRoulette::BetPosition& bp = spin.m_Bets[i];
-                                bool won = BeamRoulette::IsBetWon(bp.m_Type, bp.m_Number, result);
-                                uint64_t payout = won ? (bp.m_Amount * bp.m_Multiplier) / 100 : 0;
-                                if (won) { previewPayout += payout; winsCount++; }
-
-                                Env::DocGroup bpGr("");
-                                Env::DocAddNum("won", (uint32_t)(won ? 1 : 0));
-                                Env::DocAddNum("payout", payout);
-                            }
-                        }
-                        Env::DocAddNum("preview_total_payout", previewPayout);
-                        Env::DocAddNum("preview_wins_count", winsCount);
-                    }
-                }
-                else if (spin.m_Status == BeamRoulette::SpinStatus::Won)
-                {
-                    // Buffer unclaimed spin ID
-                    if (unclaimedCount < MAX_UNCLAIMED)
-                        unclaimedIds[unclaimedCount++] = spin.m_SpinId;
-                }
-                else
-                {
-                    // Lost/Claimed — add to history buffer (no cap)
                     SpinHistSlot& h = histBuf[histCount++];
                     h.spinId = spin.m_SpinId;
                     h.totalWagered = spin.m_TotalWagered;
@@ -1004,6 +1037,64 @@ void On_view_all(const ContractID& cid)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // Restore numeric order in all three buffers (scan returns lexicographic order)
+    SortU64Asc(pendingIds, pendingCount);
+    SortU64Asc(unclaimedIds, unclaimedCount);
+    SortSpinHistBySpinId(histBuf, histCount);
+
+    // === PENDING SPINS (re-read each by sorted ID) ===
+    {
+        Env::DocArray gr("pending");
+        for (uint32_t pi = 0; pi < pendingCount; pi++)
+        {
+            Env::Key_T<BeamRoulette::SpinKey> rk;
+            rk.m_Prefix.m_Cid = cid;
+            rk.m_KeyInContract.m_SpinId = pendingIds[pi];
+            BeamRoulette::Spin spin;
+            if (!Env::VarReader::Read_T(rk, spin)) continue;
+
+            uint64_t blocksRemaining = 0;
+            if (spin.m_RevealAt > currentHeight)
+                blocksRemaining = spin.m_RevealAt - currentHeight;
+
+            Env::DocGroup spinGr("");
+            Env::DocAddNum("spin_id", spin.m_SpinId);
+            Env::DocAddNum("num_bets", (uint32_t)spin.m_NumBets);
+            Env::DocAddNum("total_wagered", spin.m_TotalWagered);
+            Env::DocAddNum("max_payout", spin.m_MaxPayout);
+            Env::DocAddNum("created_height", spin.m_CreatedHeight);
+            Env::DocAddNum("reveal_at", spin.m_RevealAt);
+            Env::DocAddNum("blocks_remaining", blocksRemaining);
+            Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+
+            OutputBetPositions(spin);
+
+            // Preview result for ready spins
+            if (blocksRemaining == 0) {
+                uint8_t result = CalculateSpinResult(spin.m_PlacementHash, spin.m_RevealAt, spin.m_SpinId);
+                Env::DocAddNum("preview_result", (uint32_t)result);
+
+                uint64_t previewPayout = 0;
+                uint32_t winsCount = 0;
+                {
+                    Env::DocArray prevArr("preview_bets");
+                    for (uint8_t i = 0; i < spin.m_NumBets; i++) {
+                        const BeamRoulette::BetPosition& bp = spin.m_Bets[i];
+                        bool won = BeamRoulette::IsBetWon(bp.m_Type, bp.m_Number, result);
+                        uint64_t payout = won ? (bp.m_Amount * bp.m_Multiplier) / 100 : 0;
+                        if (won) { previewPayout += payout; winsCount++; }
+
+                        Env::DocGroup bpGr("");
+                        Env::DocAddNum("won", (uint32_t)(won ? 1 : 0));
+                        Env::DocAddNum("payout", payout);
+                    }
+                }
+                Env::DocAddNum("preview_total_payout", previewPayout);
+                Env::DocAddNum("preview_wins_count", winsCount);
             }
         }
     }
@@ -1064,23 +1155,21 @@ void On_view_all(const ContractID& cid)
         }
     }
 
-    // === RECENT RESULTS — last 9 globally resolved spins ===
+    // === RECENT RESULTS — last 9 globally resolved spins (newest first) ===
     {
         Env::DocArray gr("recent_results");
         if (s.m_NextSpinId > 1)
         {
-            uint64_t startId = (s.m_NextSpinId > 50) ? (s.m_NextSpinId - 50) : 1;
-
+            // Full range scan, collect resolved spin IDs, sort, take last 9.
             Env::Key_T<BeamRoulette::SpinKey> k0, k1;
             k0.m_Prefix.m_Cid = cid;
-            k0.m_KeyInContract.m_SpinId = startId;
+            k0.m_KeyInContract.m_SpinId = 0;
             k1.m_Prefix.m_Cid = cid;
-            k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
+            k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
 
-            // Circular buffer for last 9
-            uint32_t recentIds[9];
-            uint8_t recentResults[9];
-            uint32_t recentCount = 0, recentWrite = 0;
+            uint32_t maxRecent = (uint32_t)s.m_NextSpinId;
+            uint64_t* recentIds = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * maxRecent);
+            uint32_t recentCount = 0;
 
             Env::VarReader scanner(k0, k1);
             Env::Key_T<BeamRoulette::SpinKey> key;
@@ -1088,26 +1177,35 @@ void On_view_all(const ContractID& cid)
             while (scanner.MoveNext_T(key, spin))
             {
                 if (spin.m_Status == BeamRoulette::SpinStatus::Pending) continue;
-
-                recentIds[recentWrite] = (uint32_t)spin.m_SpinId;
-                recentResults[recentWrite] = spin.m_Result;
-                recentWrite = (recentWrite + 1) % 9;
-                if (recentCount < 9) recentCount++;
+                if (recentCount < maxRecent)
+                    recentIds[recentCount++] = spin.m_SpinId;
             }
 
-            // Output newest first
-            for (uint32_t i = 0; i < recentCount; i++)
+            SortU64Asc(recentIds, recentCount);
+
+            // Take last 9 (newest), output newest first
+            uint32_t start = (recentCount > 9) ? (recentCount - 9) : 0;
+            for (uint32_t i = 0; i < recentCount - start; i++)
             {
-                uint32_t idx = (recentWrite + 9 - 1 - i) % 9;
+                uint32_t idx = recentCount - 1 - i;  // newest first
+                Env::Key_T<BeamRoulette::SpinKey> rk;
+                rk.m_Prefix.m_Cid = cid;
+                rk.m_KeyInContract.m_SpinId = recentIds[idx];
+                BeamRoulette::Spin rspin;
+                if (!Env::VarReader::Read_T(rk, rspin)) continue;
+
                 Env::DocGroup resGr("");
-                Env::DocAddNum("spin_id", (uint64_t)recentIds[idx]);
-                Env::DocAddNum("result", (uint32_t)recentResults[idx]);
+                Env::DocAddNum("spin_id", rspin.m_SpinId);
+                Env::DocAddNum("result", (uint32_t)rspin.m_Result);
             }
+
+            Env::Heap_Free(recentIds);
         }
     }
 
     Env::Heap_Free(unclaimedIds);
     Env::Heap_Free(histBuf);
+    Env::Heap_Free(pendingIds);
 }
 
 void On_view_recent_results(const ContractID& cid)
@@ -1130,13 +1228,16 @@ void On_view_recent_results(const ContractID& cid)
 
     if (s.m_NextSpinId > 1)
     {
-        uint64_t startId = (s.m_NextSpinId > count) ? (s.m_NextSpinId - count) : 1;
-
+        // Full lexicographic range scan — see s_MaxSpinIdBound note above.
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_SpinId = startId;
+        k0.m_KeyInContract.m_SpinId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
+        k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
+
+        uint32_t maxSlots = (uint32_t)s.m_NextSpinId;
+        uint64_t* ids = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * maxSlots);
+        uint32_t collected = 0;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamRoulette::SpinKey> key;
@@ -1144,12 +1245,29 @@ void On_view_recent_results(const ContractID& cid)
         while (scanner.MoveNext_T(key, spin))
         {
             if (spin.m_Status == BeamRoulette::SpinStatus::Pending) continue;
+            if (collected < maxSlots)
+                ids[collected++] = spin.m_SpinId;
+        }
+
+        SortU64Asc(ids, collected);
+
+        // Output the most recent `count` resolved spins, oldest-of-window first
+        uint32_t start = (collected > count) ? (collected - count) : 0;
+        for (uint32_t i = start; i < collected; i++)
+        {
+            Env::Key_T<BeamRoulette::SpinKey> rk;
+            rk.m_Prefix.m_Cid = cid;
+            rk.m_KeyInContract.m_SpinId = ids[i];
+            BeamRoulette::Spin rspin;
+            if (!Env::VarReader::Read_T(rk, rspin)) continue;
 
             Env::DocGroup spinGr("");
-            Env::DocAddNum("spin_id", spin.m_SpinId);
-            Env::DocAddNum("result", (uint32_t)spin.m_Result);
-            Env::DocAddNum("status", (uint32_t)spin.m_Status);
+            Env::DocAddNum("spin_id", rspin.m_SpinId);
+            Env::DocAddNum("result", (uint32_t)rspin.m_Result);
+            Env::DocAddNum("status", (uint32_t)rspin.m_Status);
         }
+
+        Env::Heap_Free(ids);
     }
 }
 
@@ -1173,17 +1291,37 @@ void On_view_all_spins(const ContractID& cid)
 
     if (s.m_NextSpinId > 1)
     {
+        // Full lexicographic range scan — see s_MaxSpinIdBound note above. Collect
+        // all spin IDs, sort, then re-read each for output (scan order is non-numeric).
         Env::Key_T<BeamRoulette::SpinKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_SpinId = 1;
+        k0.m_KeyInContract.m_SpinId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_SpinId = s.m_NextSpinId - 1;
+        k1.m_KeyInContract.m_SpinId = s_MaxSpinIdBound;
+
+        uint32_t maxSpins = (uint32_t)s.m_NextSpinId;
+        uint64_t* ids = (uint64_t*) Env::Heap_Alloc(sizeof(uint64_t) * maxSpins);
+        uint32_t collected = 0;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamRoulette::SpinKey> key;
         BeamRoulette::Spin spin;
         while (scanner.MoveNext_T(key, spin))
         {
+            if (collected < maxSpins)
+                ids[collected++] = spin.m_SpinId;
+        }
+
+        SortU64Asc(ids, collected);
+
+        for (uint32_t i = 0; i < collected; i++)
+        {
+            Env::Key_T<BeamRoulette::SpinKey> rk;
+            rk.m_Prefix.m_Cid = cid;
+            rk.m_KeyInContract.m_SpinId = ids[i];
+            BeamRoulette::Spin spin;
+            if (!Env::VarReader::Read_T(rk, spin)) continue;
+
             Env::DocGroup spinGr("");
             Env::DocAddNum("spin_id", spin.m_SpinId);
             Env::DocAddBlob_T("user_pk", spin.m_UserPk);
@@ -1211,6 +1349,8 @@ void On_view_all_spins(const ContractID& cid)
 
             OutputBetPositions(spin);
         }
+
+        Env::Heap_Free(ids);
     }
 }
 
