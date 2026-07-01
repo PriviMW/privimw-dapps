@@ -76,6 +76,50 @@ static void U64ToStr(uint64_t val, char* buf, uint32_t maxLen) {
     buf[j] = 0;
 }
 
+// ----------------------------------------------------------------------------
+// Range-scan ordering note (CRITICAL):
+// BetKey.m_BetId is stored as a native (little-endian) uint64. Env::VarReader
+// enumerates keys in LEXICOGRAPHIC byte order, which does NOT match numeric
+// order once betId >= 256. e.g. for betIds 0..266 the lexicographic sequence is
+// 0, 256, 1, 257, 2, 258, ... 10, 266.
+//
+// Consequence: a numeric upper bound of (NextBetId - 1) is WRONG. When NextBetId
+// crosses 256, betIds 11..255 (LE bytes 0B 00..FF 00) are lexicographically
+// GREATER than the bound's LE bytes (e.g. 0A 01 for 266), so they are excluded
+// from the scan and silently disappear from every view AND from claim-all.
+//
+// Fix: always scan the FULL lexicographic range [0, UINT64_MAX] (0 is the
+// lexicographic minimum, UINT64_MAX the maximum — together they cover every
+// existing bet key), filter in code, and sort results by betId before output.
+// ----------------------------------------------------------------------------
+static const uint64_t s_MaxBetIdBound = static_cast<uint64_t>(-1);
+
+// Insertion sort HistSlot array ascending by betId (small N, no STL dependency).
+static void SortHistByBetId(HistSlot* arr, uint32_t n) {
+    for (uint32_t i = 1; i < n; i++) {
+        HistSlot cur = arr[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && arr[(uint32_t)j].betId > cur.betId) {
+            arr[(uint32_t)j + 1] = arr[(uint32_t)j];
+            j--;
+        }
+        arr[(uint32_t)j + 1] = cur;
+    }
+}
+
+// Insertion sort Bet array ascending by betId.
+static void SortBetByBetId(BeamBet::Bet* arr, uint32_t n) {
+    for (uint32_t i = 1; i < n; i++) {
+        BeamBet::Bet cur = arr[i];
+        int32_t j = (int32_t)i - 1;
+        while (j >= 0 && arr[(uint32_t)j].m_BetId > cur.m_BetId) {
+            arr[(uint32_t)j + 1] = arr[(uint32_t)j];
+            j--;
+        }
+        arr[(uint32_t)j + 1] = cur;
+    }
+}
+
 // ============================================================================
 // Schema: Method_0
 // ============================================================================
@@ -334,7 +378,7 @@ void On_check_results(const ContractID& cid)
         k0.m_Prefix.m_Cid = cid;
         k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
@@ -448,22 +492,37 @@ void On_my_bets(const ContractID& cid)
 
     Env::DocArray gr("bets");
 
-    // Batch range scan — one Vars_Enum instead of N individual reads
-    if (s.m_FirstUnresolvedBetId < s.m_NextBetId)
+    // Full lexicographic range scan — see s_MaxBetIdBound note above. Buffer the
+    // user's pending bets, sort by betId, then output (scan order is non-numeric).
+    if (s.m_NextBetId > 0)
     {
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_BetId = s.m_FirstUnresolvedBetId;
+        k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
+
+        uint32_t maxPending = (uint32_t)s.m_NextBetId;
+        BeamBet::Bet* pending = (BeamBet::Bet*) Env::Heap_Alloc(sizeof(BeamBet::Bet) * maxPending);
+        uint32_t pendingCount = 0;
+
         while (scanner.MoveNext_T(key, b))
         {
             if (_POD_(b.m_UserPk) != userPk) continue;
             if (b.m_Status != BeamBet::BetStatus::Pending) continue;
+            if (pendingCount < maxPending)
+                pending[pendingCount++] = b;
+        }
+
+        SortBetByBetId(pending, pendingCount);
+
+        for (uint32_t i = 0; i < pendingCount; i++)
+        {
+            BeamBet::Bet& b = pending[i];
 
             uint64_t blocksRemaining = 0;
             if (b.m_RevealAt > currentHeight)
@@ -506,6 +565,8 @@ void On_my_bets(const ContractID& cid)
                 }
             }
         }
+
+        Env::Heap_Free(pending);
     }
 }
 
@@ -535,12 +596,12 @@ void On_result_history(const ContractID& cid)
 
     if (s.m_NextBetId > 0)
     {
-        // Scan from 0 for full user history
+        // Scan from 0 for full user history (full lexicographic range — see s_MaxBetIdBound)
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
         k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
@@ -562,6 +623,9 @@ void On_result_history(const ContractID& cid)
             h.revealedHeight = b.m_RevealedHeight;
         }
     }
+
+    // Restore numeric order (scan returns lexicographic) before reversing to newest-first
+    SortHistByBetId(histBuf, histCount);
 
     // Output newest first (reverse order)
     Env::DocArray gr("history");
@@ -648,7 +712,9 @@ void On_view_all(const ContractID& cid)
     Height currentHeight = Env::get_Height();
 
     // === SINGLE RANGE SCAN for pending bets, unclaimed wins, and history ===
-    // One Vars_Enum call — no cap on history, full user history
+    // Full lexicographic range [0, UINT64_MAX] — see s_MaxBetIdBound note above.
+    // One Vars_Enum call — no cap on history, full user history. Results are
+    // buffered then sorted by betId (scan order is non-numeric due to LE keys).
 
     // Separate buffer for unclaimed wins — NOT capped so they never get lost
     static const uint32_t MAX_UNCLAIMED = 100;
@@ -660,91 +726,52 @@ void On_view_all(const ContractID& cid)
     HistSlot* histBuf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * maxHistSlots);
     uint32_t histCount = 0;
 
+    // Pending bets buffer (full Bet records — needed for preview computation)
+    BeamBet::Bet* pendingBuf = (BeamBet::Bet*) Env::Heap_Alloc(sizeof(BeamBet::Bet) * maxHistSlots);
+    uint32_t pendingCount = 0;
+
+    if (s.m_NextBetId > 0)
     {
-        Env::DocArray gr("bets");
-        if (s.m_NextBetId > 0)
+        Env::Key_T<BeamBet::BetKey> k0, k1;
+        k0.m_Prefix.m_Cid = cid;
+        k0.m_KeyInContract.m_BetId = 0;
+        k1.m_Prefix.m_Cid = cid;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
+
+        Env::VarReader scanner(k0, k1);
+        Env::Key_T<BeamBet::BetKey> key;
+        BeamBet::Bet b;
+        while (scanner.MoveNext_T(key, b))
         {
-            // Start from FirstUnresolvedBetId for pending/unclaimed,
-            // but scan from 0 for full history
-            uint64_t startId = 0;
+            if (_POD_(b.m_UserPk) != userPk) continue;
 
-            Env::Key_T<BeamBet::BetKey> k0, k1;
-            k0.m_Prefix.m_Cid = cid;
-            k0.m_KeyInContract.m_BetId = startId;
-            k1.m_Prefix.m_Cid = cid;
-            k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
-
-            Env::VarReader scanner(k0, k1);
-            Env::Key_T<BeamBet::BetKey> key;
-            BeamBet::Bet b;
-            while (scanner.MoveNext_T(key, b))
+            if (b.m_Status == BeamBet::BetStatus::Pending)
             {
-                if (_POD_(b.m_UserPk) != userPk) continue;
-
-                if (b.m_Status == BeamBet::BetStatus::Pending)
+                if (pendingCount < maxHistSlots)
+                    pendingBuf[pendingCount++] = b;
+            }
+            else if (b.m_Status == BeamBet::BetStatus::Won)
+            {
+                // Unclaimed win — buffer separately
+                if (unclaimedCount < MAX_UNCLAIMED)
                 {
-                    // Output pending bet directly to "bets" array
-                    uint64_t blocksRemaining = 0;
-                    if (b.m_RevealAt > currentHeight)
-                        blocksRemaining = b.m_RevealAt - currentHeight;
-
-                    Env::DocGroup betGr("");
-                    Env::DocAddNum("bet_id", b.m_BetId);
-                    Env::DocAddNum("amount", b.m_Amount);
-                    Env::DocAddNum("type", (uint32_t)b.m_Type);
-                    Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
-                    Env::DocAddNum("status", (uint32_t)b.m_Status);
-                    Env::DocAddNum("created_height", b.m_CreatedHeight);
-                    Env::DocAddNum("blocks_remaining", blocksRemaining);
-                    Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
-
-                    // Preview result for ready bets (deterministic — no TX needed to know outcome)
-                    if (blocksRemaining == 0)
-                    {
-                        Height revealHeight = b.m_RevealAt;
-                        HashProcessor::Sha256 hp;
-                        hp.Write(b.m_PlacementHash);
-                        hp.Write(&revealHeight, sizeof(revealHeight));
-                        hp.Write(&b.m_BetId, sizeof(b.m_BetId));
-                        HashValue resultHash;
-                        hp >> resultHash;
-                        uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
-                        uint8_t result = (rawValue % 100) + 1;
-
-                        bool won = false;
-                        switch (b.m_Type) {
-                            case 0: won = (result > 50); break;
-                            case 1: won = (result < 51); break;
-                            case 2: won = (result == b.m_ExactNumber); break;
-                        }
-
-                        Env::DocAddNum("preview_result", (uint32_t)result);
-                        Env::DocAddNum("preview_won", (uint32_t)(won ? 1 : 0));
-                        if (won) {
-                            Env::DocAddNum("preview_payout", (b.m_Amount * b.m_Multiplier) / 100);
-                        }
-                    }
+                    HistSlot& u = unclaimedBuf[unclaimedCount++];
+                    u.betId = b.m_BetId;
+                    u.amount = b.m_Amount;
+                    u.type = (uint32_t)b.m_Type;
+                    u.exactNumber = (uint32_t)b.m_ExactNumber;
+                    u.result = (uint32_t)b.m_Result;
+                    u.status = (uint32_t)b.m_Status;
+                    u.payout = b.m_Payout;
+                    u.createdHeight = b.m_CreatedHeight;
+                    u.revealedHeight = b.m_RevealedHeight;
                 }
-                else if (b.m_Status == BeamBet::BetStatus::Won)
+            }
+            else
+            {
+                // Lost/Claimed — add to history buffer (no cap)
+                if (histCount < maxHistSlots)
                 {
-                    // Unclaimed win — buffer separately
-                    if (unclaimedCount < MAX_UNCLAIMED)
-                    {
-                        HistSlot& u = unclaimedBuf[unclaimedCount++];
-                        u.betId = b.m_BetId;
-                        u.amount = b.m_Amount;
-                        u.type = (uint32_t)b.m_Type;
-                        u.exactNumber = (uint32_t)b.m_ExactNumber;
-                        u.result = (uint32_t)b.m_Result;
-                        u.status = (uint32_t)b.m_Status;
-                        u.payout = b.m_Payout;
-                        u.createdHeight = b.m_CreatedHeight;
-                        u.revealedHeight = b.m_RevealedHeight;
-                    }
-                }
-                else
-                {
-                    // Lost/Claimed — add to history buffer (no cap)
                     HistSlot& h = histBuf[histCount++];
                     h.betId = b.m_BetId;
                     h.amount = b.m_Amount;
@@ -760,7 +787,62 @@ void On_view_all(const ContractID& cid)
         }
     }
 
-    // === UNCLAIMED WINS — always output all of them ===
+    // Restore numeric order in all three buffers (scan returns lexicographic order)
+    SortBetByBetId(pendingBuf, pendingCount);
+    SortHistByBetId(unclaimedBuf, unclaimedCount);
+    SortHistByBetId(histBuf, histCount);
+
+    // === PENDING BETS ===
+    {
+        Env::DocArray gr("bets");
+        for (uint32_t i = 0; i < pendingCount; i++)
+        {
+            BeamBet::Bet& b = pendingBuf[i];
+
+            uint64_t blocksRemaining = 0;
+            if (b.m_RevealAt > currentHeight)
+                blocksRemaining = b.m_RevealAt - currentHeight;
+
+            Env::DocGroup betGr("");
+            Env::DocAddNum("bet_id", b.m_BetId);
+            Env::DocAddNum("amount", b.m_Amount);
+            Env::DocAddNum("type", (uint32_t)b.m_Type);
+            Env::DocAddNum("exact_number", (uint32_t)b.m_ExactNumber);
+            Env::DocAddNum("status", (uint32_t)b.m_Status);
+            Env::DocAddNum("created_height", b.m_CreatedHeight);
+            Env::DocAddNum("blocks_remaining", blocksRemaining);
+            Env::DocAddNum("can_reveal", (uint32_t)(blocksRemaining == 0 ? 1 : 0));
+
+            // Preview result for ready bets (deterministic — no TX needed to know outcome)
+            if (blocksRemaining == 0)
+            {
+                Height revealHeight = b.m_RevealAt;
+                HashProcessor::Sha256 hp;
+                hp.Write(b.m_PlacementHash);
+                hp.Write(&revealHeight, sizeof(revealHeight));
+                hp.Write(&b.m_BetId, sizeof(b.m_BetId));
+                HashValue resultHash;
+                hp >> resultHash;
+                uint16_t rawValue = ((uint16_t)resultHash.m_p[0] << 8) | resultHash.m_p[1];
+                uint8_t result = (rawValue % 100) + 1;
+
+                bool won = false;
+                switch (b.m_Type) {
+                    case 0: won = (result > 50); break;
+                    case 1: won = (result < 51); break;
+                    case 2: won = (result == b.m_ExactNumber); break;
+                }
+
+                Env::DocAddNum("preview_result", (uint32_t)result);
+                Env::DocAddNum("preview_won", (uint32_t)(won ? 1 : 0));
+                if (won) {
+                    Env::DocAddNum("preview_payout", (b.m_Amount * b.m_Multiplier) / 100);
+                }
+            }
+        }
+    }
+
+    // === UNCLAIMED WINS — always output all of them (sorted ascending) ===
     {
         Env::DocArray gr("unclaimed");
         for (uint32_t i = 0; i < unclaimedCount; i++)
@@ -780,7 +862,7 @@ void On_view_all(const ContractID& cid)
         }
     }
 
-    // === RESULT HISTORY — output newest first (reverse order) ===
+    // === RESULT HISTORY — output newest first (reverse of sorted ascending) ===
     {
         Env::DocArray gr("history");
         for (uint32_t i = 0; i < histCount; i++)
@@ -807,6 +889,7 @@ void On_view_all(const ContractID& cid)
 
     Env::Heap_Free(unclaimedBuf);
     Env::Heap_Free(histBuf);
+    Env::Heap_Free(pendingBuf);
 }
 
 void On_check_result(const ContractID& cid)
@@ -925,20 +1008,30 @@ void On_view_all_bets(const ContractID& cid)
 
     Env::DocArray gr("bets");
 
-    // Batch range scan — one Vars_Enum instead of N individual reads
+    // Full lexicographic range scan — see s_MaxBetIdBound note above. Buffer all
+    // bets, sort by betId, then output (scan order is non-numeric due to LE keys).
     if (s.m_NextBetId > 0)
     {
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
         k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
-        BeamBet::Bet b;
-        while (scanner.MoveNext_T(key, b))
+
+        uint32_t maxBets = (uint32_t)s.m_NextBetId;
+        BeamBet::Bet* buf = (BeamBet::Bet*) Env::Heap_Alloc(sizeof(BeamBet::Bet) * maxBets);
+        uint32_t count = 0;
+        while (count < maxBets && scanner.MoveNext_T(key, buf[count]))
+            count++;
+
+        SortBetByBetId(buf, count);
+
+        for (uint32_t i = 0; i < count; i++)
         {
+            BeamBet::Bet& b = buf[i];
             Env::DocGroup betGr("");
             Env::DocAddNum("bet_id", b.m_BetId);
             Env::DocAddBlob_T("user_pk", b.m_UserPk);
@@ -971,6 +1064,8 @@ void On_view_all_bets(const ContractID& cid)
             else if (b.m_Type == 1) typeText = "down";
             Env::DocAddText("type_text", typeText);
         }
+
+        Env::Heap_Free(buf);
     }
 }
 
@@ -995,29 +1090,52 @@ void On_view_recent_results(const ContractID& cid)
 
     if (s.m_NextBetId > 0)
     {
-        uint64_t startId = (s.m_NextBetId > count) ? (s.m_NextBetId - count) : 0;
-
+        // Full lexicographic range scan — see s_MaxBetIdBound note above. Collect all
+        // resolved bets, sort by betId, then output the most recent `count` (ascending).
         Env::Key_T<BeamBet::BetKey> k0, k1;
         k0.m_Prefix.m_Cid = cid;
-        k0.m_KeyInContract.m_BetId = startId;
+        k0.m_KeyInContract.m_BetId = 0;
         k1.m_Prefix.m_Cid = cid;
-        k1.m_KeyInContract.m_BetId = s.m_NextBetId - 1;
+        k1.m_KeyInContract.m_BetId = s_MaxBetIdBound;
+
+        uint32_t maxSlots = (uint32_t)s.m_NextBetId;
+        HistSlot* buf = (HistSlot*) Env::Heap_Alloc(sizeof(HistSlot) * maxSlots);
+        uint32_t collected = 0;
 
         Env::VarReader scanner(k0, k1);
         Env::Key_T<BeamBet::BetKey> key;
         BeamBet::Bet b;
         while (scanner.MoveNext_T(key, b))
         {
-            // Only output resolved bets with a result
+            // Only collect resolved bets with a result
             if (b.m_Status == BeamBet::BetStatus::Pending) continue;
             if (b.m_Result == 0) continue;
-
-            Env::DocGroup betGr("");
-            Env::DocAddNum("result", (uint32_t)b.m_Result);
-            Env::DocAddNum("type", (uint32_t)b.m_Type);
-            Env::DocAddNum("status", (uint32_t)b.m_Status);
-            Env::DocAddNum("revealed_height", b.m_RevealedHeight);
+            if (collected < maxSlots)
+            {
+                HistSlot& h = buf[collected++];
+                h.betId = b.m_BetId;
+                h.result = (uint32_t)b.m_Result;
+                h.type = (uint32_t)b.m_Type;
+                h.status = (uint32_t)b.m_Status;
+                h.revealedHeight = b.m_RevealedHeight;
+            }
         }
+
+        SortHistByBetId(buf, collected);
+
+        // Output the most recent `count` resolved bets, oldest-of-window first
+        uint32_t start = (collected > count) ? (collected - count) : 0;
+        for (uint32_t i = start; i < collected; i++)
+        {
+            HistSlot& h = buf[i];
+            Env::DocGroup betGr("");
+            Env::DocAddNum("result", h.result);
+            Env::DocAddNum("type", h.type);
+            Env::DocAddNum("status", h.status);
+            Env::DocAddNum("revealed_height", h.revealedHeight);
+        }
+
+        Env::Heap_Free(buf);
     }
 }
 
